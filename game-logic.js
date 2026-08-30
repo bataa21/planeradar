@@ -9,8 +9,8 @@ let timer;
 let soundOn = true;
 let isDarkMode = false;
 let lang = 'en';
-let timerInterval;
 let secondsElapsed = 0;
+let timerRunning = false;
 
 let gameMode = 'radar';
 let battlePhase = 'placement';
@@ -40,6 +40,16 @@ const hintEl = document.getElementById('hint');
 const PREFS_KEY = 'planeRadarPrefs_v1';
 const DEFAULT_DIFFICULTY = '8';
 
+function detectInitialLanguage() {
+  const browserLanguages = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+
+  return browserLanguages.some(code => String(code).toLowerCase().startsWith('mn'))
+    ? 'mn'
+    : 'en';
+}
+
 function savePreferences() {
   try {
     const difficultyEl = document.getElementById('difficulty');
@@ -66,7 +76,9 @@ function loadPreferences() {
 
     if (typeof saved.soundOn === 'boolean') soundOn = saved.soundOn;
     if (typeof saved.isDarkMode === 'boolean') isDarkMode = saved.isDarkMode;
-    if (saved.lang === 'en' || saved.lang === 'mn') lang = saved.lang;
+    lang = saved.lang === 'en' || saved.lang === 'mn'
+      ? saved.lang
+      : detectInitialLanguage();
 
     const difficultyEl = document.getElementById('difficulty');
     if (difficultyEl) {
@@ -194,7 +206,6 @@ const texts = {
 
 function initializeGame() {
   loadPreferences();
-  clearInterval(timerInterval);
   secondsElapsed = 0;
   document.getElementById("status").textContent = getStatus();
   gridSize = parseInt(document.getElementById("difficulty").value);
@@ -297,6 +308,7 @@ function handleCellClick(e) {
   const r = parseInt(e.target.dataset.row);
   const c = parseInt(e.target.dataset.col);
   if (e.target.textContent !== '') return;
+  startGameTimer();
   moves++;
   let isHit = false;
   planes.forEach((p, i) => {
@@ -320,7 +332,7 @@ function handleCellClick(e) {
   updateStatus();
   updateHints(r, c);
   if (hits >= planes.length) {
-    clearInterval(timer);
+    stopGameTimer();
 
     grid.flat().forEach(cell => {
       if (cell.textContent === '✈️') {
@@ -406,7 +418,7 @@ function playBattleLoseCue() {
 }
 
 function updateStatus() {
-  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const elapsed = getElapsedSeconds();
   const min = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const sec = String(elapsed % 60).padStart(2, '0');
   const tEn = texts[lang];
@@ -423,17 +435,32 @@ function updateTime() {
   updateStatus();
 }
 
+function getElapsedSeconds() {
+  return timerRunning
+    ? Math.floor((Date.now() - startTime) / 1000)
+    : secondsElapsed;
+}
+
+function startGameTimer() {
+  if (timerRunning) return;
+  startTime = Date.now() - (secondsElapsed * 1000);
+  timerRunning = true;
+  clearInterval(timer);
+  timer = setInterval(updateTime, 1000);
+  updateStatus();
+}
+
+function stopGameTimer() {
+  if (timerRunning) secondsElapsed = getElapsedSeconds();
+  timerRunning = false;
+  clearInterval(timer);
+  updateStatus();
+}
+
 function getStatus() {
   const tEn = texts[lang];
   const time = new Date(secondsElapsed * 1000).toISOString().substr(14, 5);
   return `${tEn.moves}: ${moves} | ${tEn.hits}: ${hits} | ${tEn.time}: ${time}`;
-}
-
-function startTimer() {
-  timerInterval = setInterval(() => {
-    secondsElapsed++;
-    updateStatus();
-  }, 1000);
 }
 
 function restartGame() {
@@ -455,8 +482,8 @@ function restartGame() {
   savePreferences();
 
   clearInterval(timer);
-  clearInterval(timerInterval);
-  startTime = Date.now();
+  timerRunning = false;
+  startTime = null;
   secondsElapsed = 0;
   moves = 0;
   hits = 0;
@@ -476,7 +503,6 @@ function restartGame() {
     updateStatus();
   }
 
-  timer = setInterval(updateTime, 1000);
 }
 
 function toggleSound() {
@@ -885,6 +911,7 @@ function togglePlayerPlane(row, col) {
 
 function beginBattle() {
   if (playerPlanes.length !== battlePlaneCount()) return;
+  startGameTimer();
   battlePhase = 'player';
   battleShotsLeft = battleVolleySize();
   enemyShotHistory = new Set();
@@ -942,6 +969,7 @@ function playerBattleShot(row, col) {
   if (enemyPlanes.every(p => p.hit)) {
     battleFinishedWinner = 'player';
     battlePhase = 'finished';
+    stopGameTimer();
     renderBattleBoards();
     showBattleResult(true);
     return;
@@ -1245,6 +1273,7 @@ function botTurn() {
       botBusy = false;
       battleFinishedWinner = 'enemy';
       battlePhase = 'finished';
+      stopGameTimer();
       renderBattleBoards();
       playBattleLoseCue();
       showBattleResult(false);
@@ -1269,7 +1298,7 @@ function saveToHallOfFame(name) {
   const date = new Date().toLocaleString();
   const level = gridSize;
 
-  const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+  const elapsedSeconds = getElapsedSeconds();
   const score = {
     name,
     moves,
