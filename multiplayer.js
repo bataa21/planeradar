@@ -213,6 +213,15 @@
     try {
       const user = await ensureSignedIn();
       const candidateRef = database.ref(`rooms/${candidate}`);
+      // Prime this browser's local cache before starting the transaction.
+      // A first transaction on an unseen path may otherwise receive `null`
+      // locally and abort before the server room has been downloaded.
+      const initialSnapshot = await candidateRef.once("value");
+      if (!initialSnapshot.exists()) {
+        setNote(t().roomMissing, "error");
+        setBusy(false);
+        return;
+      }
       let reason = "missing";
       const result = await candidateRef.transaction(current => {
         if (!current) {
