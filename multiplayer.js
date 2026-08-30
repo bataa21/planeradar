@@ -111,6 +111,32 @@
     return String(100000 + (values[0] % 900000));
   }
 
+  function waitForServerRoom(reference, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      const finish = value => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reference.off("value", handleValue);
+        resolve(value);
+      };
+      const handleValue = snapshot => {
+        // Realtime Database may first emit an empty local-cache snapshot.
+        // Keep listening until the server supplies the actual room.
+        if (snapshot.exists()) finish(snapshot);
+      };
+      const timer = setTimeout(() => finish(null), timeoutMs);
+      reference.on("value", handleValue, error => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reference.off("value", handleValue);
+        reject(error);
+      });
+    });
+  }
+
   function stopListening() {
     if (roomRef && roomListener) roomRef.off("value", roomListener);
     roomListener = null;
@@ -213,38 +239,26 @@
     try {
       const user = await ensureSignedIn();
       const candidateRef = database.ref(`rooms/${candidate}`);
-      // Prime this browser's local cache before starting the transaction.
-      // A first transaction on an unseen path may otherwise receive `null`
-      // locally and abort before the server room has been downloaded.
-      const initialSnapshot = await candidateRef.once("value");
-      if (!initialSnapshot.exists()) {
+      const initialSnapshot = await waitForServerRoom(candidateRef);
+      if (!initialSnapshot || !initialSnapshot.exists()) {
         setNote(t().roomMissing, "error");
         setBusy(false);
         return;
       }
-      let reason = "missing";
-      const result = await candidateRef.transaction(current => {
-        if (!current) {
-          reason = "missing";
-          return;
-        }
-        if (current.hostUid === user.uid) {
-          reason = "own";
-          return;
-        }
-        if (current.guestUid && current.guestUid !== user.uid) {
-          reason = "full";
-          return;
-        }
-        reason = "ok";
-        return { ...current, guestUid: user.uid, status: "connected" };
-      }, undefined, false);
-      if (!result.committed) {
-        const messages = { missing: t().roomMissing, own: t().ownRoom, full: t().roomFull };
-        setNote(messages[reason] || t().unavailable, "error");
+      const current = initialSnapshot.val();
+      if (current.hostUid === user.uid) {
+        setNote(t().ownRoom, "error");
         setBusy(false);
         return;
       }
+      if (current.guestUid && current.guestUid !== user.uid) {
+        setNote(t().roomFull, "error");
+        setBusy(false);
+        return;
+      }
+      // Security Rules permit this only while the guest slot is empty (or is
+      // already owned by this user), so simultaneous third-player joins fail.
+      await candidateRef.update({ guestUid: user.uid, status: "connected" });
       roomRef = candidateRef;
       roomCode = candidate;
       role = "guest";
