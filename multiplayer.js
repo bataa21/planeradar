@@ -53,6 +53,8 @@
   let roomListener = null;
   let statusKey = "";
   let ready = false;
+  let placementEntered = false;
+  let placementTimer = null;
 
   const language = () => window.getPlaneRadarLanguage
     ? window.getPlaneRadarLanguage()
@@ -148,16 +150,36 @@
       if (!snapshot.exists()) {
         setNote(t().cancelled, "error");
         stopListening();
+        clearTimeout(placementTimer);
+        placementTimer = null;
+        placementEntered = false;
         roomRef = null;
         roomCode = "";
         role = "";
         restoreCreateLabel();
+        if (window.handleOnlineRoomClosed) window.handleOnlineRoomClosed();
         return;
       }
       const room = snapshot.val();
       statusKey = room.status === "connected" && room.guestUid ? "connected" : "waiting";
       setNote(t()[statusKey](roomCode), statusKey);
       restoreCreateLabel();
+      if (window.updateOnlineRoomState) {
+        window.updateOnlineRoomState({ ...room, roomCode, role });
+      }
+      if (statusKey === "connected" && !placementEntered) {
+        placementEntered = true;
+        clearTimeout(placementTimer);
+        placementTimer = setTimeout(() => {
+          if (roomRef && window.enterOnlinePlacement) {
+            window.enterOnlinePlacement({
+              roomCode,
+              role,
+              difficulty: Number(room.difficulty) || 8
+            });
+          }
+        }, 900);
+      }
     };
     roomRef.on("value", roomListener, () => setNote(t().unavailable, "error"));
   }
@@ -187,6 +209,7 @@
       return;
     }
     setBusy(true);
+    placementEntered = false;
     setNote(t().connecting, "busy");
     try {
       const user = await ensureSignedIn();
@@ -199,7 +222,9 @@
           return {
             hostUid: user.uid,
             status: "waiting",
-            createdAt: firebase.database.ServerValue.TIMESTAMP
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            difficulty: Number(document.getElementById("difficulty")?.value) || 8,
+            hostReady: false
           };
         }, undefined, false);
         if (!result.committed) continue;
@@ -235,6 +260,7 @@
       return;
     }
     setBusy(true);
+    placementEntered = false;
     setNote(t().joining, "busy");
     try {
       const user = await ensureSignedIn();
@@ -258,12 +284,20 @@
       }
       // Security Rules permit this only while the guest slot is empty (or is
       // already owned by this user), so simultaneous third-player joins fail.
-      await candidateRef.update({ guestUid: user.uid, status: "connected" });
+      await candidateRef.update({
+        guestUid: user.uid,
+        guestReady: false,
+        status: "connected"
+      });
       roomRef = candidateRef;
       roomCode = candidate;
       role = "guest";
       statusKey = "connected";
-      await roomRef.onDisconnect().update({ guestUid: null, status: "waiting" });
+      await roomRef.onDisconnect().update({
+        guestUid: null,
+        guestReady: null,
+        status: "waiting"
+      });
       listenToRoom();
       setNote(t().connected(candidate), "connected");
       setBusy(false);
@@ -278,6 +312,9 @@
     if (!roomRef) return;
     const reference = roomRef;
     const currentRole = role;
+    clearTimeout(placementTimer);
+    placementTimer = null;
+    placementEntered = false;
     stopListening();
     roomRef = null;
     roomCode = "";
@@ -286,11 +323,23 @@
     try {
       await reference.onDisconnect().cancel();
       if (currentRole === "host") await reference.remove();
-      else await reference.update({ guestUid: null, status: "waiting" });
+      else await reference.update({ guestUid: null, guestReady: null, status: "waiting" });
     } catch (_) {
       // onDisconnect remains the fallback if the network disappears.
     }
     restoreCreateLabel();
+  }
+
+  async function setReady(isReady) {
+    if (!roomRef || !role) return false;
+    const field = role === "host" ? "hostReady" : "guestReady";
+    try {
+      await roomRef.child(field).set(Boolean(isReady));
+      return true;
+    } catch (error) {
+      console.error("Ready update failed", error);
+      return false;
+    }
   }
 
   function refreshLanguage() {
@@ -303,7 +352,9 @@
     createRoom,
     joinRoom,
     leaveRoom,
+    setReady,
     refreshLanguage,
-    hasRoom: () => Boolean(roomRef)
+    hasRoom: () => Boolean(roomRef),
+    getSession: () => ({ roomCode, role })
   };
 })();
