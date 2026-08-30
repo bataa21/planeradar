@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#071521">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Plane Radar">
+<title>✈️ Plane Radar Game</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+*{box-sizing:border-box}
+body{font-family:monospace;text-align:center;margin:0;padding:20px 10px}
+body.light-theme{background:#fff;color:#000}
+body.dark-theme{background:#111;color:#fff}
+h2{margin:18px 0 10px;font-size:20px}
+
+#controls{display:flex;flex-direction:column;align-items:center;gap:5px;margin:0 auto 8px}
+.mode-choice-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 8px}
+.mode-choice{font-family:inherit;font-size:14px;font-weight:bold;line-height:1.2;padding:7px 15px;border-radius:7px;border:1px solid #ccc;cursor:pointer;white-space:nowrap}
+body.light-theme .mode-choice{background:#f5f5f5;color:#000}
+body.dark-theme .mode-choice{background:#2a2a2a;color:#fff;border-color:#484848}
+.mode-choice.active{box-shadow:inset 0 0 0 2px currentColor}
+#modeSelect{display:none}
+.control-row{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:nowrap}
+#controls button,#controls select{font-family:inherit;font-size:14px;line-height:1.2;padding:6px 10px;border-radius:5px;border:1px solid #ccc;cursor:pointer;white-space:nowrap}
+body.light-theme #controls button,body.light-theme #controls select{background:#f5f5f5;color:#000}
+body.dark-theme #controls button,body.dark-theme #controls select{background:#2a2a2a;color:#fff;border-color:#484848}
+#status{margin:8px 0 7px;font-weight:bold;font-size:13px}
+#grid{display:flex;justify-content:center;width:100%}
+.game-table{border-collapse:collapse;margin:0 auto}
+.game-cell {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23e53935' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%23e53935'/%3E%3Cpath d='M16 1v8M16 23v8M1 16h8M23 16h8' stroke='%23e53935' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair;
+  font-size: 18px;
+  user-select: none;
+}
+body.light-theme .game-cell{background:#e6f0fa;color:#000;border:1px solid #ccc}
+body.dark-theme .game-cell{background:#2a2a2a;color:#fff;border:1px solid #444}
+
+.header-cell{width:32px;height:20px;min-width:32px;padding:0;text-align:center;vertical-align:middle;font-weight:bold;font-size:13px}
+body.light-theme .header-cell{background:#e6f0fa!important;color:#000!important;border:0}
+body.dark-theme .header-cell{background:#000!important;color:#fff!important;border:1px solid #333}
+
+.highlight{background:#ffeb00!important;color:#000!important}
+#hint{margin:10px auto 0;font-style:italic;font-size:13px;line-height:1.35;width:fit-content;max-width:95vw;text-align:left}
+#hall-of-fame{margin:18px auto 0;max-width:95vw;overflow-x:auto}
+#hall-of-fame table{margin:auto;border-collapse:collapse}
+#hall-of-fame th,#hall-of-fame td{padding:4px 7px}
+
+
+/* Target-lock hover effect */
+@media (hover: hover) and (pointer: fine) {
+  body.light-theme .game-cell.radar-line {
+    background: #d8e9f8;
+  }
+
+  body.light-theme .game-cell.radar-target {
+    background: #ffd9d9;
+    box-shadow: inset 0 0 0 2px #e53935;
+  }
+
+  body.dark-theme .game-cell.radar-line {
+    background: #343b42;
+  }
+
+  body.dark-theme .game-cell.radar-target {
+    background: #4a2b2b;
+    box-shadow: inset 0 0 0 2px #ff5a5a;
+  }
+
+  .game-cell.highlight.radar-line,
+  .game-cell.highlight.radar-target {
+    background: #ffeb00 !important;
+    color: #000 !important;
+  }
+}
+
+
+/* Plane discovery animation */
+@keyframes radarHitPulse {
+  0%   { transform: scale(1); box-shadow: inset 0 0 0 2px #e53935; }
+  30%  { transform: scale(1.14); background: #fff176; box-shadow: 0 0 0 5px rgba(255,235,0,.28); }
+  60%  { transform: scale(.96); background: #ffeb00; }
+  100% { transform: scale(1); background: #ffeb00; box-shadow: none; }
+}
+
+@keyframes radarVictoryPulse {
+  0%,100% { transform: scale(1); }
+  50%     { transform: scale(1.10); filter: brightness(1.22); }
+}
+
+.game-cell.plane-discovered {
+  animation: radarHitPulse 520ms ease-out;
+  position: relative;
+  z-index: 2;
+}
+
+.game-cell.victory-plane {
+  animation: radarVictoryPulse 650ms ease-in-out 2;
+}
+
+@media(max-width:480px){
+ body{padding:10px 4px}
+ h2{font-size:18px;margin-top:10px}
+ .control-row{gap:5px}
+ #controls button,#controls select{font-size:12px;padding:5px 7px}
+ .mode-choice{font-size:12px;padding:6px 12px}
+ .game-cell{width:min(32px,8.1vw);height:min(32px,8.1vw);min-width:0;font-size:16px}
+ .header-cell{width:min(32px,8.1vw);min-width:0;font-size:12px}
+ #status,#hint{font-size:12px}
+}
+.game-wrapper {
+  width: fit-content;
+  min-width: 390px;
+  margin: 20px auto;
+  padding: 14px 22px 20px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+}
+
+body.dark-theme .game-wrapper {
+  border-color: #3f3f3f;
+  background: #181818;
+}
+
+body.light-theme .game-wrapper {
+  background: #fff;
+}
+
+@media (max-width: 480px) {
+  .game-wrapper {
+    width: 100%;
+    min-width: 0;
+    margin: 0 auto;
+    padding: 8px 4px 14px;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+  }
+}
+
+/* Hall of Fame — separate records for Easy / Medium / Hard */
+#hall-of-fame {
+  margin-top: 18px;
+  width: min(100%, 430px);
+}
+
+.hof-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hof-table th,
+.hof-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #bbb;
+}
+
+body.dark-theme .hof-table th,
+body.dark-theme .hof-table td {
+  border-bottom-color: #444;
+}
+
+.hof-empty {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  opacity: .75;
+}
+
+
+/* Battle Mode */
+.battle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.battle-board-block {
+  width: fit-content;
+}
+
+.battle-board-title {
+  font-weight: bold;
+  font-size: 13px;
+  margin: 3px 0 5px;
+}
+
+.battle-message {
+  font-weight: bold;
+  font-size: 12px;
+  margin: 5px auto 8px;
+  max-width: 360px;
+}
+
+.battle-action {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  margin: 4px 0 7px;
+  border-radius: 5px;
+  border: 1px solid #bbb;
+  cursor: pointer;
+}
+
+body.light-theme .battle-action {
+  background: #f5f5f5;
+  color: #000;
+}
+
+body.dark-theme .battle-action {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #484848;
+}
+
+.battle-action:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.battle-player-cell {
+  cursor: pointer;
+}
+
+.battle-enemy-cell {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23e53935' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%23e53935'/%3E%3Cpath d='M16 1v8M16 23v8M1 16h8M23 16h8' stroke='%23e53935' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair;
+}
+
+.placed-plane {
+  background: #dff4df !important;
+}
+
+body.dark-theme .placed-plane {
+  background: #254025 !important;
+}
+
+.enemy-hit,
+.player-hit {
+  background: #ffeb00 !important;
+  color: #000 !important;
+}
+
+.battle-miss {
+  color: inherit;
+}
+
+.bot-shot {
+  animation: botShotFlash 1000ms ease-out;
+}
+
+@keyframes botShotFlash {
+  0% { box-shadow: inset 0 0 0 3px #e53935; }
+  100% { box-shadow: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  body.light-theme .battle-enemy-cell.battle-line {
+    background: #d8e9f8;
+  }
+  body.light-theme .battle-enemy-cell.battle-target {
+    background: #ffd9d9;
+    box-shadow: inset 0 0 0 2px #e53935;
+  }
+  body.dark-theme .battle-enemy-cell.battle-line {
+    background: #343b42;
+  }
+  body.dark-theme .battle-enemy-cell.battle-target {
+    background: #4a2b2b;
+    box-shadow: inset 0 0 0 2px #ff5a5a;
+  }
+  .battle-enemy-cell.enemy-hit.battle-line,
+  .battle-enemy-cell.enemy-hit.battle-target {
+    background: #ffeb00 !important;
+    color: #000 !important;
+  }
+}
+
+.battle-hints {
+  margin: 6px auto 0;
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  width: fit-content;
+  max-width: 95vw;
+}
+
+
+.placement-status {
+  margin: 5px auto 7px;
+  padding: 4px 8px;
+  width: fit-content;
+  max-width: 95%;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+body.light-theme .placement-status {
+  background: #f3f6f8;
+  border: 1px solid #cfd8dc;
+  color: #222;
+}
+
+body.dark-theme .placement-status {
+  background: #222a2f;
+  border: 1px solid #46535b;
+  color: #fff;
+}
+
+.placement-status.ready {
+  background: #e6f6e6 !important;
+  border-color: #8fbd8f !important;
+  color: #165c16 !important;
+}
+
+body.dark-theme .placement-status.ready {
+  background: #203a20 !important;
+  border-color: #557c55 !important;
+  color: #c9f7c9 !important;
+}
+
+
+/* Battle Mode board palette only.
+   Original Radar Mode .game-cell colors remain untouched. */
+.battle-player-cell {
+  background: #3598DB !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+}
+
+.battle-enemy-cell {
+  background: #2D3E50 !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Keep the Battle palette the same in Dark Mode. */
+body.dark-theme .battle-player-cell {
+  background: #3598DB !important;
+  border-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+body.dark-theme .battle-enemy-cell {
+  background: #2D3E50 !important;
+  border-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* Miss markers need contrast on the colored boards. */
+.battle-player-cell.battle-miss,
+.battle-enemy-cell.battle-miss {
+  color: #ffffff !important;
+}
+
+/* Preserve discovered/hit planes as strong yellow targets. */
+.battle-player-cell.player-hit,
+.battle-enemy-cell.enemy-hit,
+.battle-enemy-cell.highlight {
+  background: #ffeb00 !important;
+  color: #000000 !important;
+}
+
+/* Your unhit planes remain visible, but keep the blue board identity. */
+.battle-player-cell.placed-plane:not(.player-hit) {
+  background: #3598DB !important;
+}
+
+/* Target-lock hover adapted to the new enemy-board color. */
+@media (hover: hover) and (pointer: fine) {
+  body.light-theme .battle-enemy-cell.battle-line,
+  body.dark-theme .battle-enemy-cell.battle-line {
+    background: #405a73 !important;
+  }
+
+  body.light-theme .battle-enemy-cell.battle-target,
+  body.dark-theme .battle-enemy-cell.battle-target {
+    background: #654047 !important;
+    box-shadow: inset 0 0 0 2px #ff5a5a;
+  }
+
+  .battle-enemy-cell.enemy-hit.battle-line,
+  .battle-enemy-cell.enemy-hit.battle-target {
+    background: #ffeb00 !important;
+    color: #000000 !important;
+  }
+}
+
+
+/* Battle result modal */
+.battle-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.34);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.battle-result-modal {
+  position: relative;
+  width: min(92vw, 360px);
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  text-align: center;
+  box-shadow: 0 14px 35px rgba(0,0,0,.28);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+body.light-theme .battle-result-modal {
+  background: rgba(255,255,255,.78);
+  color: #111;
+  border: 1px solid rgba(207,216,220,.92);
+}
+
+body.dark-theme .battle-result-modal {
+  background: rgba(32,38,43,.80);
+  color: #fff;
+  border: 1px solid rgba(70,83,91,.92);
+}
+
+.battle-result-title {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 7px;
+}
+
+.battle-result-score {
+  margin-bottom: 11px;
+}
+
+.battle-result-modal button {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  border: 1px solid #aaa;
+  cursor: pointer;
+}
+
+body.light-theme .battle-result-modal button {
+  background: #f6f6f6;
+  color: #000;
+}
+
+body.dark-theme .battle-result-modal button {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #555;
+}
+
+.battle-result-modal .battle-result-close{
+  position:absolute;
+  top:4px;
+  right:5px;
+  width:32px;
+  height:32px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#e53935;
+  font-size:25px;
+  font-weight:bold;
+  line-height:32px;
+  cursor:pointer;
+}
+body.light-theme .battle-result-modal .battle-result-close,
+body.dark-theme .battle-result-modal .battle-result-close{
+  background:transparent;
+  color:#e53935;
+  border:0;
+}
+.battle-result-modal .battle-result-close:hover{color:#b71c1c}
+
+/* V4.3.1 responsive Battle layout — Radar Mode untouched */
+.battle-boards-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+}
+
+.battle-mobile-summary {
+  display: none;
+}
+
+@media (min-width: 760px) {
+  body:has(.battle-boards-row) .game-wrapper {
+    width: fit-content;
+    max-width: calc(100vw - 24px);
+  }
+
+  .battle-board-block {
+    margin: 0;
+  }
+
+  .battle-board-block .game-cell {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+  }
+
+  .battle-board-block .header-cell {
+    width: 28px !important;
+    min-width: 28px !important;
+  }
+}
+
+@media (max-width: 759px) {
+  .battle-boards-row {
+    display: block;
+  }
+
+  .battle-board-block.mobile-hidden {
+    display: none;
+  }
+
+  .battle-mobile-summary {
+    display: block;
+    width: min(92vw, 350px);
+    box-sizing: border-box;
+    margin: 8px auto 12px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  body.light-theme .battle-mobile-summary {
+    background: #f4f6f8;
+    border: 1px solid #ccd4da;
+    color: #111;
+  }
+
+  body.dark-theme .battle-mobile-summary {
+    background: #20262b;
+    border: 1px solid #46535b;
+    color: #fff;
+  }
+}
+
+
+.battle-volley-notice {
+  margin: -2px auto 8px;
+  padding: 5px 10px;
+  width: fit-content;
+  max-width: 92%;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: bold;
+  border: 1px solid #bbb;
+  background: rgba(255,255,255,.92);
+}
+body.dark-theme .battle-volley-notice {
+  background: rgba(42,42,42,.94);
+  border-color: #555;
+}
+@media (max-width: 700px) {
+  .battle-message { font-size: 13px; margin-top: 4px; }
+  .battle-volley-notice { font-size: 11px; }
+}
+
+/* V4.5 — Battle sounds + subtle animations */
+@keyframes battleTurnPop {
+  0% { transform: scale(.96); opacity: .35; }
+  55% { transform: scale(1.035); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes battleBoardIn {
+  from { transform: translateY(7px); opacity: .70; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes playerShotPulse {
+  0% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); transform: scale(.92); }
+  35% { box-shadow: inset 0 0 0 4px rgba(255,255,255,.95), 0 0 0 5px rgba(229,57,53,.22); transform: scale(1.06); }
+  100% { box-shadow: none; transform: scale(1); }
+}
+@keyframes battleHitBurst {
+  0% { transform: scale(.88); filter: brightness(1); }
+  35% { transform: scale(1.16); filter: brightness(1.35); }
+  70% { transform: scale(.96); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+@keyframes battleSummaryPop {
+  0% { opacity: 0; transform: translateY(-5px) scale(.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.battle-message.turn-pop { animation: battleTurnPop 520ms ease-out; }
+.battle-board-block.board-in { animation: battleBoardIn 430ms ease-out; }
+.game-cell.player-shot { animation: playerShotPulse 760ms ease-out; position: relative; z-index: 3; }
+.game-cell.battle-hit-burst { animation: battleHitBurst 820ms ease-out; position: relative; z-index: 4; }
+.battle-volley-notice { animation: battleSummaryPop 360ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-message.turn-pop,
+  .battle-board-block.board-in,
+  .game-cell.player-shot,
+  .game-cell.battle-hit-burst,
+  .battle-volley-notice,
+  .bot-shot { animation: none !important; }
+}
+
+
+/* V4.6.3 — Compact controls + Settings popup */
+.settings-icon-btn{
+  font-family:inherit;
+  font-size:16px !important;
+  line-height:1 !important;
+  padding:6px 9px !important;
+  min-width:38px;
+}
+.settings-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  background:rgba(0,0,0,.24);
+}
+.settings-backdrop.open{display:flex}
+.settings-panel{
+  width:min(88vw,280px);
+  border-radius:10px;
+  padding:12px;
+  box-shadow:0 12px 32px rgba(0,0,0,.24);
+}
+body.light-theme .settings-panel{
+  background:rgba(255,255,255,.96);
+  color:#111;
+  border:1px solid #cfd8dc;
+}
+body.dark-theme .settings-panel{
+  background:rgba(32,38,43,.97);
+  color:#fff;
+  border:1px solid #46535b;
+}
+.settings-panel-top{
+  display:flex;
+  justify-content:flex-end;
+  margin-bottom:4px;
+}
+.settings-close{
+  font-family:inherit;
+  font-size:16px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+  padding:2px 6px;
+}
+.settings-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.settings-actions button{
+  font-family:inherit;
+  font-size:13px;
+  line-height:1.2;
+  padding:8px 10px;
+  border-radius:6px;
+  border:1px solid #bbb;
+  cursor:pointer;
+  width:100%;
+}
+body.light-theme .settings-actions button{
+  background:#f5f5f5;
+  color:#000;
+}
+body.dark-theme .settings-actions button{
+  background:#2a2a2a;
+  color:#fff;
+  border-color:#484848;
+}
+@media(max-width:480px){
+  .mode-choice-row{margin-bottom:5px}
+  #controls{gap:4px;margin-bottom:6px}
+  .settings-icon-btn{font-size:15px !important;padding:5px 8px !important}
+}
+
+
+/* V4.6.8 — Distance Help */
+.help-backdrop{
+  position:fixed; inset:0; z-index:10001; display:none;
+  align-items:center; justify-content:center; padding:16px;
+  background:rgba(0,0,0,.30);
+}
+.help-backdrop.open{display:flex}
+.help-panel{
+  width:min(90vw,320px); border-radius:12px; padding:12px 14px 14px;
+  box-shadow:0 14px 35px rgba(0,0,0,.26);
+}
+body.light-theme .help-panel{
+  background:rgba(255,255,255,.97); color:#111; border:1px solid #cfd8dc;
+}
+body.dark-theme .help-panel{
+  background:rgba(32,38,43,.97); color:#fff; border:1px solid #46535b;
+}
+.help-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.help-title{font-weight:bold;font-size:14px}
+.help-close{
+  font-family:inherit;font-size:16px;border:0;background:transparent;
+  color:inherit;cursor:pointer;padding:2px 6px;
+}
+.help-image{
+  display:block;width:min(100%,240px);height:auto;margin:6px auto 4px;
+  image-rendering:auto;border-radius:8px;
+}
+.help-caption{margin-top:8px;font-size:12px;line-height:1.4;opacity:.88}
+
+/* V4.7.0 — PWA installation polish */
+.settings-version{font-size:11px;opacity:.68;margin:3px 0 0}
+#installBtn[hidden]{display:none}
+.update-toast{
+  position:fixed;left:50%;bottom:max(14px,env(safe-area-inset-bottom));z-index:10020;
+  transform:translate(-50%,18px);display:flex;align-items:center;gap:10px;
+  width:min(92vw,390px);padding:10px 12px;border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.28);opacity:0;pointer-events:none;
+  transition:opacity .22s ease,transform .22s ease;
+}
+.update-toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+body.light-theme .update-toast{background:#fff;color:#111;border:1px solid #cfd8dc}
+body.dark-theme .update-toast{background:#20262b;color:#fff;border:1px solid #46535b}
+.update-message{flex:1;text-align:left;font-size:12px;font-weight:bold}
+.update-toast button{font-family:inherit;font-size:12px;padding:6px 9px;border-radius:6px;border:1px solid #888;cursor:pointer}
+body.light-theme .update-toast button{background:#f5f5f5;color:#111}
+body.dark-theme .update-toast button{background:#2a2a2a;color:#fff;border-color:#66727a}
+
+</style>
+</head>
+<body class="light-theme">
+  <div class="game-wrapper">
+<h2 id="gameTitle">✈️ Plane Radar Game</h2>
+
+<div class="mode-choice-row" aria-label="Game mode">
+  <button id="radarModeBtn" class="mode-choice active" type="button">🎯 Radar</button>
+  <button id="battleModeBtn" class="mode-choice" type="button">⚔️ Battle</button>
+</div>
+
+<div id="controls">
+  <div class="control-row">
+    <select id="modeSelect" title="Game mode" aria-hidden="true" tabindex="-1">
+      <option value="radar" selected>🎯 Radar</option>
+      <option value="battle">⚔️ Battle</option>
+    </select>
+    <span>🎯</span>
+    <select id="difficulty">
+      <option value="5">Easy</option>
+      <option value="8" selected>Medium</option>
+      <option value="10">Hard</option>
+    </select>
+    <button id="restartBtn" onclick="restartGame()">🔄 Restart</button>
+    <button id="langBtn" onclick="toggleLang()">🌐 MN</button>
+    <button id="settingsBtn" class="settings-icon-btn" type="button" aria-label="Settings" title="Settings">⚙️</button>
+  </div>
+</div>
+
+<div id="status">Moves: 0 | Hits: 0 | Time: 00:00</div>
+<div id="grid"></div>
+<div id="hint"></div>
+<div id="hall-of-fame"></div>
+</div>
+
+<div id="settingsBackdrop" class="settings-backdrop" aria-hidden="true">
+  <div class="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-panel-top">
+      <button id="settingsCloseBtn" class="settings-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <div class="settings-actions">
+      <button id="soundBtn" onclick="toggleSound()">🔊 Mute</button>
+      <button id="themeBtn" onclick="toggleTheme()">🌗 Dark Mode</button>
+      <button id="distanceHelpBtn" type="button">❓ Distance Guide</button>
+      <button id="installBtn" type="button" hidden>📲 Install App</button>
+    </div>
+    <div id="versionInfo" class="settings-version">Plane Radar · V4.7.2</div>
+  </div>
+</div>
+
+<div id="distanceHelpBackdrop" class="help-backdrop" aria-hidden="true">
+  <div class="help-panel" role="dialog" aria-modal="true" aria-labelledby="distanceHelpTitle">
+    <div class="help-top">
+      <div id="distanceHelpTitle" class="help-title">📡 Distance Guide</div>
+      <button id="distanceHelpCloseBtn" class="help-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <img src="distance.png" alt="Distance guide" class="help-image">
+    <div id="distanceHelpCaption" class="help-caption">
+      Straight adjacent cells = 1 km · Diagonal adjacent cells = 1.4 km
+    </div>
+  </div>
+</div>
+<div id="updateToast" class="update-toast" role="status" aria-live="polite">
+  <div id="updateMessage" class="update-message">A new version is ready.</div>
+  <button id="updateNowBtn" type="button">Update</button>
+  <button id="updateLaterBtn" type="button" aria-label="Later">✕</button>
+</div>
+<audio id="sound-radar-laser" src="sounds/radar/laserhit.mp3" preload="auto"></audio>
+<audio id="sound-radar-revealed" src="sounds/radar/revealed.mp3" preload="auto"></audio>
+<audio id="sound-battle-hit" src="sounds/battle/hit.mp3" preload="auto"></audio>
+<audio id="sound-battle-explode" src="sounds/battle/explode.mp3" preload="auto"></audio>
+<audio id="sound-battle-place" src="sounds/battle/place.mp3" preload="auto"></audio>
+
+<script src="game-logic.js?v=4.7.2"></script>
+
+
+<script>
+(() => {
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsBackdrop = document.getElementById('settingsBackdrop');
+  const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+
+  function openSettings() {
+    settingsBackdrop.classList.add('open');
+    settingsBackdrop.setAttribute('aria-hidden', 'false');
+    settingsCloseBtn.focus();
+  }
+
+  function closeSettings() {
+    settingsBackdrop.classList.remove('open');
+    settingsBackdrop.setAttribute('aria-hidden', 'true');
+    settingsBtn.focus();
+  }
+
+  settingsBtn.addEventListener('click', openSettings);
+  settingsCloseBtn.addEventListener('click', closeSettings);
+
+  const distanceHelpBtn = document.getElementById('distanceHelpBtn');
+  const distanceHelpBackdrop = document.getElementById('distanceHelpBackdrop');
+  const distanceHelpCloseBtn = document.getElementById('distanceHelpCloseBtn');
+
+  function openDistanceHelp() {
+    settingsBackdrop.classList.remove('open');
+    settingsBackdrop.setAttribute('aria-hidden', 'true');
+    distanceHelpBackdrop.classList.add('open');
+    distanceHelpBackdrop.setAttribute('aria-hidden', 'false');
+    distanceHelpCloseBtn.focus();
+  }
+
+  function closeDistanceHelp() {
+    distanceHelpBackdrop.classList.remove('open');
+    distanceHelpBackdrop.setAttribute('aria-hidden', 'true');
+    settingsBtn.focus();
+  }
+
+  distanceHelpBtn.addEventListener('click', openDistanceHelp);
+  distanceHelpCloseBtn.addEventListener('click', closeDistanceHelp);
+
+  distanceHelpBackdrop.addEventListener('click', (event) => {
+    if (event.target === distanceHelpBackdrop) closeDistanceHelp();
+  });
+
+  settingsBackdrop.addEventListener('click', (event) => {
+    if (event.target === settingsBackdrop) closeSettings();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (distanceHelpBackdrop.classList.contains('open')) {
+      closeDistanceHelp();
+    } else if (settingsBackdrop.classList.contains('open')) {
+      closeSettings();
+    }
+  });
+})();
+</script>
+
+<script>
+(() => {
+  const installBtn = document.getElementById('installBtn');
+  const updateToast = document.getElementById('updateToast');
+  const updateNowBtn = document.getElementById('updateNowBtn');
+  const updateLaterBtn = document.getElementById('updateLaterBtn');
+  let deferredInstallPrompt = null;
+  let waitingWorker = null;
+  let refreshing = false;
+
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+  const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+
+  if (isIos && !isStandalone()) installBtn.hidden = false;
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    if (!isStandalone()) installBtn.hidden = false;
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) {
+      if (isIos) {
+        alert(lang === 'mn'
+          ? 'Safari-ийн Share товчийг дараад “Add to Home Screen”-ийг сонгоно уу.'
+          : 'In Safari, tap Share and choose “Add to Home Screen”.');
+      }
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.hidden = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    installBtn.hidden = true;
+  });
+
+  function showUpdate(worker) {
+    waitingWorker = worker;
+    updateToast.classList.add('show');
+  }
+
+  updateNowBtn.addEventListener('click', () => {
+    if (waitingWorker) waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+  });
+  updateLaterBtn.addEventListener('click', () => updateToast.classList.remove('show'));
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
+    window.addEventListener('load', async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('./service-worker.js');
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          showUpdate(registration.waiting);
+        }
+        registration.addEventListener('updatefound', () => {
+          const worker = registration.installing;
+          if (!worker) return;
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdate(worker);
+            }
+          });
+        });
+      } catch (error) {
+        console.error('Service worker registration failed:', error);
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>
