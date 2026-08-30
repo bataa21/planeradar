@@ -35,6 +35,7 @@ let onlineRole = '';
 let onlineLocalReady = false;
 let onlineOpponentReady = false;
 let onlineEnemyHitCells = new Set();
+let onlineDistanceHints = {};
 let onlineProcessedShotSequence = 0;
 let onlineResolvingShotSequence = 0;
 let onlineShotSending = false;
@@ -503,6 +504,7 @@ function restartGame() {
   playerShotHistory = new Set();
   enemyShotHistory = new Set();
   onlineEnemyHitCells = new Set();
+  onlineDistanceHints = {};
   onlineProcessedShotSequence = 0;
   onlineResolvingShotSequence = 0;
   onlineShotSending = false;
@@ -1045,6 +1047,7 @@ window.enterOnlinePlacement = session => {
   onlineLocalReady = false;
   onlineOpponentReady = false;
   onlineEnemyHitCells = new Set();
+  onlineDistanceHints = {};
   onlineProcessedShotSequence = 0;
   onlineResolvingShotSequence = 0;
   onlineShotSending = false;
@@ -1113,11 +1116,22 @@ async function resolveIncomingOnlineShot(shot) {
 
   const fleetDestroyed = playerPlanes.length === battlePlaneCount()
     && playerPlanes.every(placedPlane => placedPlane.hit);
+  const distanceHints = {};
+  playerPlanes.forEach((placedPlane, index) => {
+    if (placedPlane.hit) return;
+    distanceHints[index + 1] = radarDistance(
+      shot.row,
+      shot.col,
+      placedPlane.y,
+      placedPlane.x
+    );
+  });
   if (window.PlaneRadarOnline) {
     await window.PlaneRadarOnline.resolveShot(
       shot.sequence,
       isHit ? 'hit' : 'miss',
-      fleetDestroyed
+      fleetDestroyed,
+      distanceHints
     );
   }
 }
@@ -1149,6 +1163,9 @@ function handleOnlineGameState(game) {
     const key = shotKey(shot.row, shot.col);
     if (shot.attacker === onlineRole) {
       playerShotHistory.add(key);
+      onlineDistanceHints = shot.distanceHints && typeof shot.distanceHints === 'object'
+        ? shot.distanceHints
+        : {};
       if (shot.result === 'hit') {
         onlineEnemyHitCells.add(key);
         playSound(battleExplodeSound);
@@ -1189,6 +1206,7 @@ window.handleOnlineRoomClosed = () => {
   onlineLocalReady = false;
   onlineOpponentReady = false;
   onlineEnemyHitCells = new Set();
+  onlineDistanceHints = {};
   onlineProcessedShotSequence = 0;
   onlineResolvingShotSequence = 0;
   onlineShotSending = false;
@@ -1218,6 +1236,7 @@ async function leaveOnlineBattle() {
   onlineLocalReady = false;
   onlineOpponentReady = false;
   onlineEnemyHitCells = new Set();
+  onlineDistanceHints = {};
   onlineProcessedShotSequence = 0;
   onlineResolvingShotSequence = 0;
   onlineShotSending = false;
@@ -1333,6 +1352,18 @@ function renderBattleHints() {
   const t = texts[lang];
   const box = document.createElement('div');
   box.className = 'battle-hints';
+
+  if (onlineBattleSession) {
+    Object.entries(onlineDistanceHints)
+      .sort(([planeA], [planeB]) => Number(planeA) - Number(planeB))
+      .forEach(([planeNumber, distance]) => {
+        const div = document.createElement('div');
+        div.textContent = `🛰️ ${t.battleHintPrefix} #${planeNumber}: ${Number(distance).toFixed(1)} ${t.battleHintMiddle}`;
+        box.appendChild(div);
+      });
+    if (box.childElementCount) hint.appendChild(box);
+    return;
+  }
 
   enemyPlanes.forEach((p, i) => {
     if (p.hit) return;

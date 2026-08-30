@@ -400,7 +400,7 @@
     }
   }
 
-  async function resolveShot(sequence, resultName, fleetDestroyed) {
+  async function resolveShot(sequence, resultName, fleetDestroyed, distanceHints = {}) {
     if (!roomRef || !role) return false;
     try {
       const gameRef = roomRef.child("game");
@@ -426,6 +426,7 @@
           lastShot: {
             ...shot,
             result: resultName,
+            distanceHints,
             resolvedBy: role,
             resolvedAt: Date.now()
           }
