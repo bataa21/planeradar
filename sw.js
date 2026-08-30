@@ -1,8 +1,9 @@
-const CACHE_NAME = 'plane-radar-v5-0-1';
+const CACHE_NAME = 'plane-radar-v5-0-2';
 const APP_FILES = [
   './',
   './index.html',
   './game-logic.js',
+  './multiplayer.js',
   './manifest.json',
   './distance.png',
   './icons/icon-192.png',
@@ -48,7 +49,8 @@ self.addEventListener('fetch', event => {
   const isLiveCode =
     url.pathname.endsWith('/') ||
     url.pathname.endsWith('/index.html') ||
-    url.pathname.endsWith('/game-logic.js');
+    url.pathname.endsWith('/game-logic.js') ||
+    url.pathname.endsWith('/multiplayer.js');
 
   if (isLiveCode) {
     // Network-first while developing; cached fallback only if offline.

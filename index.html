@@ -742,7 +742,7 @@ body.dark-theme .update-toast{background:#20262b;color:#fff;border:1px solid #46
 body.light-theme .update-toast button{background:#f5f5f5;color:#111}
 body.dark-theme .update-toast button{background:#2a2a2a;color:#fff;border-color:#66727a}
 
-/* V5.0.1 — Multiplayer entrance */
+/* V5.0.2 — Real multiplayer room connection */
 .battle-entry-backdrop{position:fixed;inset:0;z-index:10015;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.34)}
 .battle-entry-backdrop.open{display:flex}
 .battle-entry-panel{position:relative;width:min(90vw,320px);padding:15px 14px 14px;border-radius:12px;box-shadow:0 14px 35px rgba(0,0,0,.28);text-align:center}
@@ -758,7 +758,13 @@ body.dark-theme .battle-entry-actions button,body.dark-theme .battle-entry-join-
 .battle-entry-join-row{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:9px}
 .battle-entry-join-row input{min-width:0;width:100%;font-family:inherit;font-size:13px;text-transform:uppercase;padding:9px;border-radius:7px;border:1px solid #aaa;text-align:center}
 .battle-entry-join-row button{width:auto;padding-inline:12px}
-.battle-entry-note{min-height:17px;margin-top:10px;font-size:11px;line-height:1.35;opacity:.72}
+.battle-entry-note{min-height:17px;margin-top:10px;font-size:11px;line-height:1.35;opacity:.82}
+.battle-entry-note[data-state="waiting"]{color:#9a6500;font-weight:bold}
+.battle-entry-note[data-state="connected"],.battle-entry-note[data-state="success"]{color:#168033;font-weight:bold}
+.battle-entry-note[data-state="error"]{color:#c62828;font-weight:bold}
+body.dark-theme .battle-entry-note[data-state="waiting"]{color:#ffd166}
+body.dark-theme .battle-entry-note[data-state="connected"],body.dark-theme .battle-entry-note[data-state="success"]{color:#72e58d}
+body.dark-theme .battle-entry-note[data-state="error"]{color:#ff8585}
 .battle-entry-back{margin-top:10px;border:0;background:transparent;color:inherit;font-family:inherit;font-size:12px;cursor:pointer}
 
 </style>
@@ -807,7 +813,7 @@ body.dark-theme .battle-entry-actions button,body.dark-theme .battle-entry-join-
       <button id="distanceHelpBtn" type="button">❓ Distance Guide</button>
       <button id="installBtn" type="button" hidden>📲 Install App</button>
     </div>
-    <div id="versionInfo" class="settings-version">Plane Radar · V5.0.1</div>
+    <div id="versionInfo" class="settings-version">Plane Radar · V5.0.2</div>
   </div>
 </div>
 
@@ -839,7 +845,7 @@ body.dark-theme .battle-entry-actions button,body.dark-theme .battle-entry-join-
         <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Room code" aria-label="Room code">
         <button id="joinRoomBtn" type="button">Join</button>
       </div>
-      <div id="battleEntryNote" class="battle-entry-note">Online connection arrives in V5.0.2.</div>
+      <div id="battleEntryNote" class="battle-entry-note">Create a room or enter your friend’s code.</div>
       <button id="battleEntryBackBtn" class="battle-entry-back" type="button">← Back</button>
     </div>
   </div>
@@ -855,7 +861,11 @@ body.dark-theme .battle-entry-actions button,body.dark-theme .battle-entry-join-
 <audio id="sound-battle-explode" src="sounds/battle/explode.mp3" preload="auto"></audio>
 <audio id="sound-battle-place" src="sounds/battle/place.mp3" preload="auto"></audio>
 
-<script src="game-logic.js?v=5.0.1"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-database-compat.js"></script>
+<script src="multiplayer.js?v=5.0.2"></script>
+<script src="game-logic.js?v=5.0.2"></script>
 
 
 <script>

@@ -157,7 +157,7 @@ const texts = {
     roomCode: "Room code",
     joinRoom: "Join",
     back: "Back",
-    onlineNext: "Online room connection arrives in V5.0.2."
+    onlineNext: "Create a room or enter your friend’s six-digit code."
   },
   mn: {
     title: 'Онгоцны Радар',
@@ -216,7 +216,7 @@ const texts = {
     roomCode: "Өрөөний код",
     joinRoom: "Нэгдэх",
     back: "Буцах",
-    onlineNext: "Онлайн өрөөний холболтыг V5.0.2-д нэмнэ."
+    onlineNext: "Өрөө үүсгэх эсвэл найзынхаа 6 оронтой кодыг оруулна уу."
   }
 };
 
@@ -1429,9 +1429,16 @@ function refreshBattleEntryLanguage() {
   if (backBtn) backBtn.textContent = `← ${t.back}`;
   if (note) note.textContent = t.onlineNext;
   if (closeBtn) closeBtn.setAttribute('aria-label', t.close);
+  if (window.PlaneRadarOnline) window.PlaneRadarOnline.refreshLanguage();
 }
 
+window.getPlaneRadarLanguage = () => lang;
+window.getPlaneRadarText = key => texts[lang][key];
+
 function showBattleEntryHome() {
+  if (window.PlaneRadarOnline && window.PlaneRadarOnline.hasRoom()) {
+    window.PlaneRadarOnline.leaveRoom();
+  }
   document.getElementById('battleEntryHome').hidden = false;
   document.getElementById('battleEntryFriend').hidden = true;
   document.getElementById('battleEntryTitle').textContent = texts[lang].chooseOpponent;
@@ -1455,6 +1462,9 @@ function openBattleEntry() {
 }
 
 function closeBattleEntry() {
+  if (window.PlaneRadarOnline && window.PlaneRadarOnline.hasRoom()) {
+    window.PlaneRadarOnline.leaveRoom();
+  }
   const backdrop = document.getElementById('battleEntryBackdrop');
   backdrop.classList.remove('open');
   backdrop.setAttribute('aria-hidden', 'true');
@@ -1473,8 +1483,14 @@ document.getElementById('playComputerBtn').addEventListener('click', () => {
   closeBattleEntry();
   chooseGameMode('battle');
 });
-document.getElementById('createRoomBtn').addEventListener('click', showOnlinePreviewNote);
-document.getElementById('joinRoomBtn').addEventListener('click', showOnlinePreviewNote);
+document.getElementById('createRoomBtn').addEventListener('click', () => {
+  if (window.PlaneRadarOnline) window.PlaneRadarOnline.createRoom();
+  else showOnlinePreviewNote();
+});
+document.getElementById('joinRoomBtn').addEventListener('click', () => {
+  if (window.PlaneRadarOnline) window.PlaneRadarOnline.joinRoom();
+  else showOnlinePreviewNote();
+});
 document.getElementById('roomCodeInput').addEventListener('input', event => {
   event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6);
 });
