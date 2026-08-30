@@ -149,7 +149,15 @@ const texts = {
     installApp: "Install App",
     updateReady: "A new version is ready.",
     updateNow: "Update",
-    close: "Close"
+    close: "Close",
+    chooseOpponent: "Choose opponent",
+    playComputer: "Play vs Computer",
+    playFriend: "Play with a Friend",
+    createRoom: "Create Room",
+    roomCode: "Room code",
+    joinRoom: "Join",
+    back: "Back",
+    onlineNext: "Online room connection arrives in V5.0.2."
   },
   mn: {
     title: 'Онгоцны Радар',
@@ -200,7 +208,15 @@ const texts = {
     installApp: "Апп суулгах",
     updateReady: "Шинэ хувилбар бэлэн боллоо.",
     updateNow: "Шинэчлэх",
-    close: "Хаах"
+    close: "Хаах",
+    chooseOpponent: "Өрсөлдөгчөө сонгоно уу",
+    playComputer: "Компьютертэй тоглох",
+    playFriend: "Найзтайгаа тоглох",
+    createRoom: "Өрөө үүсгэх",
+    roomCode: "Өрөөний код",
+    joinRoom: "Нэгдэх",
+    back: "Буцах",
+    onlineNext: "Онлайн өрөөний холболтыг V5.0.2-д нэмнэ."
   }
 };
 
@@ -576,6 +592,8 @@ function updateLanguageUI() {
   if (gameMode === 'battle') {
     renderBattleBoards();
   }
+
+  refreshBattleEntryLanguage();
 }
 
 function toggleLang() {
@@ -1384,6 +1402,89 @@ function chooseGameMode(mode) {
   updateLanguageUI();
 }
 
+function refreshBattleEntryLanguage() {
+  const t = texts[lang];
+  const title = document.getElementById('battleEntryTitle');
+  const friendPanel = document.getElementById('battleEntryFriend');
+  const computerBtn = document.getElementById('playComputerBtn');
+  const friendBtn = document.getElementById('playFriendBtn');
+  const createBtn = document.getElementById('createRoomBtn');
+  const roomInput = document.getElementById('roomCodeInput');
+  const joinBtn = document.getElementById('joinRoomBtn');
+  const backBtn = document.getElementById('battleEntryBackBtn');
+  const note = document.getElementById('battleEntryNote');
+  const closeBtn = document.getElementById('battleEntryCloseBtn');
+
+  if (title) title.textContent = friendPanel && !friendPanel.hidden
+    ? t.playFriend
+    : t.chooseOpponent;
+  if (computerBtn) computerBtn.textContent = `🤖 ${t.playComputer}`;
+  if (friendBtn) friendBtn.textContent = `👥 ${t.playFriend}`;
+  if (createBtn) createBtn.textContent = `➕ ${t.createRoom}`;
+  if (roomInput) {
+    roomInput.placeholder = t.roomCode;
+    roomInput.setAttribute('aria-label', t.roomCode);
+  }
+  if (joinBtn) joinBtn.textContent = t.joinRoom;
+  if (backBtn) backBtn.textContent = `← ${t.back}`;
+  if (note) note.textContent = t.onlineNext;
+  if (closeBtn) closeBtn.setAttribute('aria-label', t.close);
+}
+
+function showBattleEntryHome() {
+  document.getElementById('battleEntryHome').hidden = false;
+  document.getElementById('battleEntryFriend').hidden = true;
+  document.getElementById('battleEntryTitle').textContent = texts[lang].chooseOpponent;
+}
+
+function showBattleFriendEntry() {
+  document.getElementById('battleEntryHome').hidden = true;
+  document.getElementById('battleEntryFriend').hidden = false;
+  document.getElementById('battleEntryTitle').textContent = texts[lang].playFriend;
+  document.getElementById('battleEntryNote').textContent = texts[lang].onlineNext;
+  document.getElementById('createRoomBtn').focus();
+}
+
+function openBattleEntry() {
+  const backdrop = document.getElementById('battleEntryBackdrop');
+  showBattleEntryHome();
+  refreshBattleEntryLanguage();
+  backdrop.classList.add('open');
+  backdrop.setAttribute('aria-hidden', 'false');
+  document.getElementById('playComputerBtn').focus();
+}
+
+function closeBattleEntry() {
+  const backdrop = document.getElementById('battleEntryBackdrop');
+  backdrop.classList.remove('open');
+  backdrop.setAttribute('aria-hidden', 'true');
+  document.getElementById('battleModeBtn').focus();
+}
+
+function showOnlinePreviewNote() {
+  document.getElementById('battleEntryNote').textContent = texts[lang].onlineNext;
+}
+
+const battleEntryBackdrop = document.getElementById('battleEntryBackdrop');
+document.getElementById('battleEntryCloseBtn').addEventListener('click', closeBattleEntry);
+document.getElementById('battleEntryBackBtn').addEventListener('click', showBattleEntryHome);
+document.getElementById('playFriendBtn').addEventListener('click', showBattleFriendEntry);
+document.getElementById('playComputerBtn').addEventListener('click', () => {
+  closeBattleEntry();
+  chooseGameMode('battle');
+});
+document.getElementById('createRoomBtn').addEventListener('click', showOnlinePreviewNote);
+document.getElementById('joinRoomBtn').addEventListener('click', showOnlinePreviewNote);
+document.getElementById('roomCodeInput').addEventListener('input', event => {
+  event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6);
+});
+battleEntryBackdrop.addEventListener('click', event => {
+  if (event.target === battleEntryBackdrop) closeBattleEntry();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && battleEntryBackdrop.classList.contains('open')) closeBattleEntry();
+});
+
 document.getElementById("radarModeBtn").addEventListener("click", () => chooseGameMode("radar"));
-document.getElementById("battleModeBtn").addEventListener("click", () => chooseGameMode("battle"));
+document.getElementById("battleModeBtn").addEventListener("click", openBattleEntry);
 window.onload = initializeGame;
