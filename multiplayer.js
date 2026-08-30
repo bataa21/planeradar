@@ -167,6 +167,9 @@
       if (window.updateOnlineRoomState) {
         window.updateOnlineRoomState({ ...room, roomCode, role });
       }
+      if (room.hostReady && room.guestReady && !room.game && role === "host") {
+        initializeOnlineGame(room.difficulty);
+      }
       if (statusKey === "connected" && !placementEntered) {
         placementEntered = true;
         clearTimeout(placementTimer);
@@ -342,6 +345,99 @@
     }
   }
 
+  function volleyForDifficulty(difficulty) {
+    if (Number(difficulty) <= 5) return 3;
+    if (Number(difficulty) <= 8) return 4;
+    return 6;
+  }
+
+  async function initializeOnlineGame(difficulty) {
+    if (!roomRef || role !== "host") return false;
+    try {
+      const result = await roomRef.child("game").transaction(current => {
+        if (current) return;
+        return {
+          turn: "host",
+          shotsLeft: volleyForDifficulty(difficulty),
+          sequence: 0,
+          hostHits: 0,
+          guestHits: 0,
+          winner: ""
+        };
+      }, undefined, false);
+      return result.committed || result.snapshot.exists();
+    } catch (error) {
+      console.error("Online game initialization failed", error);
+      return false;
+    }
+  }
+
+  async function sendShot(row, col) {
+    if (!roomRef || !role) return false;
+    try {
+      const gameRef = roomRef.child("game");
+      const result = await gameRef.transaction(game => {
+        if (!game || game.winner || game.turn !== role) return;
+        if (game.lastShot && game.lastShot.result === "pending") return;
+        const sequence = Number(game.sequence || 0) + 1;
+        return {
+          ...game,
+          sequence,
+          lastShot: {
+            sequence,
+            attacker: role,
+            row: Number(row),
+            col: Number(col),
+            result: "pending",
+            createdAt: Date.now()
+          }
+        };
+      }, undefined, false);
+      return result.committed;
+    } catch (error) {
+      console.error("Online shot failed", error);
+      return false;
+    }
+  }
+
+  async function resolveShot(sequence, resultName, fleetDestroyed) {
+    if (!roomRef || !role) return false;
+    try {
+      const gameRef = roomRef.child("game");
+      const result = await gameRef.transaction(game => {
+        const shot = game?.lastShot;
+        if (!shot || shot.sequence !== sequence || shot.result !== "pending") return;
+        if (shot.attacker === role) return;
+
+        const hitField = shot.attacker === "host" ? "hostHits" : "guestHits";
+        const nextHits = Number(game[hitField] || 0) + (resultName === "hit" ? 1 : 0);
+        const remaining = Math.max(0, Number(game.shotsLeft || 1) - 1);
+        const nextTurn = shot.attacker === "host" ? "guest" : "host";
+        const winner = fleetDestroyed ? shot.attacker : "";
+
+        return {
+          ...game,
+          [hitField]: nextHits,
+          winner,
+          turn: winner ? shot.attacker : (remaining === 0 ? nextTurn : shot.attacker),
+          shotsLeft: winner ? 0 : (remaining === 0
+            ? volleyForDifficulty(document.getElementById("difficulty")?.value)
+            : remaining),
+          lastShot: {
+            ...shot,
+            result: resultName,
+            resolvedBy: role,
+            resolvedAt: Date.now()
+          }
+        };
+      }, undefined, false);
+      return result.committed;
+    } catch (error) {
+      console.error("Online shot resolution failed", error);
+      return false;
+    }
+  }
+
   function refreshLanguage() {
     if (!roomCode) return;
     setNote(t()[statusKey || "waiting"](roomCode), statusKey || "waiting");
@@ -353,6 +449,8 @@
     joinRoom,
     leaveRoom,
     setReady,
+    sendShot,
+    resolveShot,
     refreshLanguage,
     hasRoom: () => Boolean(roomRef),
     getSession: () => ({ roomCode, role })
