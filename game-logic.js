@@ -44,6 +44,7 @@ let onlineResultShown = false;
 let onlineRecovering = false;
 let onlineConnectionMessage = '';
 let onlineConnectionTimer = null;
+let onlineLocalConnected = true;
 let onlineOpponentConnected = true;
 let onlineOpponentMessage = '';
 let onlineOpponentTimer = null;
@@ -553,6 +554,7 @@ function restartGame() {
   onlineShotSending = false;
   onlineGameStarted = false;
   onlineResultShown = false;
+  onlineLocalConnected = true;
   botRadarObservations = [];
   playerPlanes = [];
   enemyPlanes = [];
@@ -1160,6 +1162,16 @@ window.enterOnlinePlacement = session => {
 
 window.updateOnlineConnectionStatus = state => {
   clearTimeout(onlineConnectionTimer);
+  onlineLocalConnected = state !== 'reconnecting';
+  if (!onlineLocalConnected) {
+    clearTimeout(onlineOpponentTimer);
+    onlineOpponentMessage = '';
+    onlineOpponentConnected = true;
+  } else {
+    // Give the freshly restored Firebase listener time to deliver the
+    // opponent's current heartbeat before evaluating it again.
+    onlineOpponentLastSeen = Date.now();
+  }
   onlineConnectionMessage = state === 'reconnecting'
     ? (lang === 'mn' ? '📡 Дахин холбогдож байна…' : '📡 Reconnecting…')
     : (lang === 'mn' ? '✅ Дахин холбогдлоо' : '✅ Connected again');
@@ -1204,7 +1216,7 @@ function updateOpponentPresence(isOnline, showImmediately = false) {
 }
 
 function evaluateOpponentHeartbeat() {
-  if (!onlineBattleSession) return;
+  if (!onlineBattleSession || !onlineLocalConnected) return;
   const heartbeatFresh = !onlineOpponentLastSeen
     || (Date.now() - onlineOpponentLastSeen) <= 9000;
   updateOpponentPresence(onlineOpponentPresenceFlag && heartbeatFresh, !heartbeatFresh);
@@ -1370,6 +1382,7 @@ window.handleOnlineRoomClosed = () => {
   onlineGameStarted = false;
   onlineResultShown = false;
   onlineConnectionMessage = '';
+  onlineLocalConnected = true;
   onlineOpponentConnected = true;
   onlineOpponentMessage = '';
   onlineOpponentPresenceFlag = true;
@@ -1408,6 +1421,7 @@ async function leaveOnlineBattle() {
   onlineGameStarted = false;
   onlineResultShown = false;
   onlineConnectionMessage = '';
+  onlineLocalConnected = true;
   onlineOpponentConnected = true;
   onlineOpponentMessage = '';
   onlineOpponentPresenceFlag = true;

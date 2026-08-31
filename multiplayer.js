@@ -1,4 +1,4 @@
-// Plane Radar V5.0.6.2 — Firebase recovery and presence heartbeat
+// Plane Radar V5.0.6.3 — Presence heartbeat with deduplicated notices
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
