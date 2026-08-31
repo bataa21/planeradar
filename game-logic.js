@@ -52,6 +52,8 @@ let onlineOpponentPresenceFlag = true;
 let onlineOpponentLastSeen = 0;
 let onlineLastGameSignature = '';
 let onlineMatchNumber = 1;
+let onlineLocalSeriesWins = 0;
+let onlineOpponentSeriesWins = 0;
 let onlineLocalRematch = false;
 let onlineOpponentRematch = false;
 
@@ -714,6 +716,12 @@ function showBattleResult(playerWon) {
   modal.appendChild(score);
 
   if (onlineBattleSession) {
+    const seriesScore = document.createElement('div');
+    seriesScore.id = 'onlineSeriesModalScore';
+    seriesScore.className = 'battle-series-score';
+    modal.appendChild(seriesScore);
+    updateOnlineSeriesDisplays();
+
     const rematchStatus = document.createElement('div');
     rematchStatus.id = 'onlineRematchStatus';
     rematchStatus.className = 'battle-rematch-status';
@@ -759,6 +767,18 @@ function showBattleResult(playerWon) {
   }
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
+}
+
+function onlineSeriesText() {
+  return lang === 'mn'
+    ? `🏆 Цуврал — Та ${onlineLocalSeriesWins} : ${onlineOpponentSeriesWins} Өрсөлдөгч · ${onlineMatchNumber}-р үе`
+    : `🏆 Series — You ${onlineLocalSeriesWins} : ${onlineOpponentSeriesWins} Opponent · Round ${onlineMatchNumber}`;
+}
+
+function updateOnlineSeriesDisplays() {
+  document.querySelectorAll('.battle-series-score').forEach(element => {
+    element.textContent = onlineSeriesText();
+  });
 }
 
 function updateOnlineRematchModal() {
@@ -969,6 +989,13 @@ function renderBattleBoards() {
   }
 
   wrap.appendChild(message);
+
+  if (onlineBattleSession) {
+    const seriesScore = document.createElement('div');
+    seriesScore.className = 'battle-series-score';
+    seriesScore.textContent = onlineSeriesText();
+    wrap.appendChild(seriesScore);
+  }
 
   if (onlineBattleSession && onlineConnectionMessage) {
     const connectionNotice = document.createElement('div');
@@ -1186,6 +1213,8 @@ window.enterOnlinePlacement = session => {
   onlineOpponentLastSeen = 0;
   onlineLastGameSignature = '';
   onlineMatchNumber = Number(session.matchNumber || 1);
+  onlineLocalSeriesWins = 0;
+  onlineOpponentSeriesWins = 0;
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
 
@@ -1317,6 +1346,12 @@ window.updateOnlineRoomState = room => {
   const opponentReady = onlineRole === 'host' ? room.guestReady : room.hostReady;
   onlineLocalReady = Boolean(localReady);
   onlineOpponentReady = Boolean(opponentReady);
+  onlineMatchNumber = Number(room.matchNumber || onlineMatchNumber || 1);
+  const hostWins = Number(room.series?.hostWins || 0);
+  const guestWins = Number(room.series?.guestWins || 0);
+  onlineLocalSeriesWins = onlineRole === 'host' ? hostWins : guestWins;
+  onlineOpponentSeriesWins = onlineRole === 'host' ? guestWins : hostWins;
+  updateOnlineSeriesDisplays();
   onlineOpponentPresenceFlag = onlineRole === 'host'
     ? (room.guestUid ? room.guestOnline !== false : false)
     : room.hostOnline !== false;
@@ -1477,6 +1512,8 @@ window.handleOnlineRoomClosed = () => {
   onlineLastGameSignature = '';
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
+  onlineLocalSeriesWins = 0;
+  onlineOpponentSeriesWins = 0;
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
@@ -1518,6 +1555,8 @@ async function leaveOnlineBattle() {
   onlineLastGameSignature = '';
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
+  onlineLocalSeriesWins = 0;
+  onlineOpponentSeriesWins = 0;
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;

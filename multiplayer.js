@@ -1,4 +1,4 @@
-// Plane Radar V5.0.7 — Online rematch
+// Plane Radar V5.0.8 — Online series score
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -375,6 +375,7 @@
             hostReady: false,
             hostRematch: false,
             matchNumber: 1,
+            series: { hostWins: 0, guestWins: 0, scoredMatch: 0 },
             hostOnline: true,
             hostSeenAt: firebase.database.ServerValue.TIMESTAMP
           };
@@ -627,6 +628,19 @@
           }
         };
       }, undefined, false);
+      if (result.committed && fleetDestroyed) {
+        const winner = result.snapshot.val()?.winner;
+        const matchNumber = currentMatchNumber || 1;
+        await roomRef.child("series").transaction(series => {
+          const current = series || { hostWins: 0, guestWins: 0, scoredMatch: 0 };
+          if (Number(current.scoredMatch || 0) >= matchNumber) return;
+          return {
+            hostWins: Number(current.hostWins || 0) + (winner === "host" ? 1 : 0),
+            guestWins: Number(current.guestWins || 0) + (winner === "guest" ? 1 : 0),
+            scoredMatch: matchNumber
+          };
+        }, undefined, false);
+      }
       return result.committed;
     } catch (error) {
       console.error("Online shot resolution failed", error);
