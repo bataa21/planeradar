@@ -41,6 +41,43 @@ let onlineResolvingShotSequence = 0;
 let onlineShotSending = false;
 let onlineGameStarted = false;
 let onlineResultShown = false;
+let onlineRecovering = false;
+let onlineConnectionMessage = '';
+let onlineConnectionTimer = null;
+
+const ONLINE_RECOVERY_KEY = 'planeRadarOnlineRecovery_v1';
+
+function readOnlineRecoveryState() {
+  try { return JSON.parse(localStorage.getItem(ONLINE_RECOVERY_KEY) || 'null'); }
+  catch (_) { return null; }
+}
+
+function saveOnlineRecoveryState() {
+  if (!onlineBattleSession || onlineRecovering || !onlineRoomCode || battlePhase === 'finished') return;
+  try {
+    localStorage.setItem(ONLINE_RECOVERY_KEY, JSON.stringify({
+      roomCode: onlineRoomCode,
+      role: onlineRole,
+      difficulty: gridSize,
+      playerPlanes,
+      playerShotHistory: Array.from(playerShotHistory),
+      enemyShotHistory: Array.from(enemyShotHistory),
+      onlineEnemyHitCells: Array.from(onlineEnemyHitCells),
+      onlineDistanceHints,
+      onlineProcessedShotSequence,
+      onlineLocalReady,
+      onlineGameStarted,
+      secondsElapsed: timerRunning ? getElapsedSeconds() : secondsElapsed,
+      savedAt: Date.now()
+    }));
+  } catch (_) {}
+}
+
+function clearOnlineRecoveryState() {
+  try { localStorage.removeItem(ONLINE_RECOVERY_KEY); } catch (_) {}
+}
+
+window.clearOnlineRecoveryState = clearOnlineRecoveryState;
 
 const radarLaserSound = document.getElementById('sound-radar-laser');
 const radarRevealedSound = document.getElementById('sound-radar-revealed');
@@ -497,7 +534,7 @@ function restartGame() {
   if (onlineBattleSession) {
     onlineLocalReady = false;
     onlineOpponentReady = false;
-    if (window.PlaneRadarOnline) window.PlaneRadarOnline.setReady(false);
+    if (!onlineRecovering && window.PlaneRadarOnline) window.PlaneRadarOnline.setReady(false);
   }
 
   // Full Battle reset: remove every trace of the previous match.
@@ -864,6 +901,13 @@ function renderBattleBoards() {
 
   wrap.appendChild(message);
 
+  if (onlineBattleSession && onlineConnectionMessage) {
+    const connectionNotice = document.createElement('div');
+    connectionNotice.className = 'placement-status' + (onlineConnectionMessage.startsWith('✅') ? ' ready' : '');
+    connectionNotice.textContent = onlineConnectionMessage;
+    wrap.appendChild(connectionNotice);
+  }
+
   if (battleVolleyNotice) {
     const notice = document.createElement('div');
     notice.className = 'battle-volley-notice';
@@ -996,6 +1040,7 @@ function renderBattleBoards() {
   gridDiv.appendChild(wrap);
   renderBattleHints();
   updateStatus();
+  saveOnlineRecoveryState();
 }
 function togglePlayerPlane(row, col) {
   if (battlePhase !== 'placement' || onlineLocalReady) return;
@@ -1041,6 +1086,12 @@ function beginBattle() {
 }
 
 window.enterOnlinePlacement = session => {
+  const recovery = readOnlineRecoveryState();
+  const canRecover = recovery
+    && recovery.roomCode === session.roomCode
+    && recovery.role === session.role
+    && Number(recovery.difficulty) === Number(session.difficulty);
+  onlineRecovering = Boolean(canRecover);
   onlineBattleSession = true;
   onlineRoomCode = session.roomCode || '';
   onlineRole = session.role || '';
@@ -1071,7 +1122,36 @@ window.enterOnlinePlacement = session => {
   backdrop.setAttribute('aria-hidden', 'true');
 
   restartGame();
+  if (canRecover) {
+    playerPlanes = Array.isArray(recovery.playerPlanes) ? recovery.playerPlanes : [];
+    playerShotHistory = new Set(recovery.playerShotHistory || []);
+    enemyShotHistory = new Set(recovery.enemyShotHistory || []);
+    onlineEnemyHitCells = new Set(recovery.onlineEnemyHitCells || []);
+    onlineDistanceHints = recovery.onlineDistanceHints || {};
+    onlineProcessedShotSequence = Number(recovery.onlineProcessedShotSequence || 0);
+    onlineLocalReady = Boolean(recovery.onlineLocalReady);
+    onlineGameStarted = Boolean(recovery.onlineGameStarted);
+    secondsElapsed = Number(recovery.secondsElapsed || 0);
+    battlePhase = onlineLocalReady ? 'online-ready' : 'placement';
+  }
+  onlineRecovering = false;
+  renderBattleBoards();
+  if (canRecover && onlineGameStarted) startGameTimer();
   updateLanguageUI();
+};
+
+window.updateOnlineConnectionStatus = state => {
+  clearTimeout(onlineConnectionTimer);
+  onlineConnectionMessage = state === 'reconnecting'
+    ? (lang === 'mn' ? '📡 Дахин холбогдож байна…' : '📡 Reconnecting…')
+    : (lang === 'mn' ? '✅ Дахин холбогдлоо' : '✅ Connected again');
+  if (onlineBattleSession) renderBattleBoards();
+  if (state === 'restored') {
+    onlineConnectionTimer = setTimeout(() => {
+      onlineConnectionMessage = '';
+      if (onlineBattleSession) renderBattleBoards();
+    }, 2200);
+  }
 };
 
 window.updateOnlineRoomState = room => {
@@ -1182,6 +1262,7 @@ function handleOnlineGameState(game) {
     battlePhase = 'finished';
     battleFinishedWinner = game.winner === onlineRole ? 'player' : 'enemy';
     stopGameTimer();
+    clearOnlineRecoveryState();
     renderBattleBoards();
     if (!onlineResultShown) {
       onlineResultShown = true;
@@ -1212,6 +1293,8 @@ window.handleOnlineRoomClosed = () => {
   onlineShotSending = false;
   onlineGameStarted = false;
   onlineResultShown = false;
+  onlineConnectionMessage = '';
+  clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
   document.getElementById('restartBtn').disabled = false;
   if (!wasOnline) return;
@@ -1242,6 +1325,8 @@ async function leaveOnlineBattle() {
   onlineShotSending = false;
   onlineGameStarted = false;
   onlineResultShown = false;
+  onlineConnectionMessage = '';
+  clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
   document.getElementById('restartBtn').disabled = false;
   if (window.PlaneRadarOnline) await window.PlaneRadarOnline.leaveRoom();

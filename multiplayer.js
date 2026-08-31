@@ -1,5 +1,6 @@
-// Plane Radar V5.0.2 — Firebase room connection
+// Plane Radar V5.0.6 — Firebase room connection and recovery
 (() => {
+  const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
     apiKey: "AIzaSyBboHmeEIgq7hEyV9KTPOtoMXGn6ofF3tQ",
     authDomain: "plane-radar-online.firebaseapp.com",
@@ -55,6 +56,35 @@
   let ready = false;
   let placementEntered = false;
   let placementTimer = null;
+  let connectionRef = null;
+  let connectionListener = null;
+  let wasDisconnected = false;
+
+  function saveConnection(difficulty) {
+    if (!roomCode || !role) return;
+    try {
+      localStorage.setItem(CONNECTION_KEY, JSON.stringify({
+        roomCode,
+        role,
+        difficulty: Number(difficulty || document.getElementById("difficulty")?.value) || 8,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
+  }
+
+  function loadConnection() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CONNECTION_KEY) || "null");
+      if (!saved || !/^\d{6}$/.test(saved.roomCode) || !["host", "guest"].includes(saved.role)) return null;
+      return saved;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearConnection() {
+    try { localStorage.removeItem(CONNECTION_KEY); } catch (_) {}
+  }
 
   const language = () => window.getPlaneRadarLanguage
     ? window.getPlaneRadarLanguage()
@@ -141,7 +171,10 @@
 
   function stopListening() {
     if (roomRef && roomListener) roomRef.off("value", roomListener);
+    if (connectionRef && connectionListener) connectionRef.off("value", connectionListener);
     roomListener = null;
+    connectionRef = null;
+    connectionListener = null;
   }
 
   function listenToRoom() {
@@ -153,6 +186,7 @@
         clearTimeout(placementTimer);
         placementTimer = null;
         placementEntered = false;
+        clearConnection();
         roomRef = null;
         roomCode = "";
         role = "";
@@ -161,6 +195,7 @@
         return;
       }
       const room = snapshot.val();
+      saveConnection(room.difficulty);
       statusKey = room.status === "connected" && room.guestUid ? "connected" : "waiting";
       setNote(t()[statusKey](roomCode), statusKey);
       restoreCreateLabel();
@@ -178,13 +213,66 @@
             window.enterOnlinePlacement({
               roomCode,
               role,
-              difficulty: Number(room.difficulty) || 8
+              difficulty: Number(room.difficulty) || 8,
+              recovered: Boolean(loadConnection())
             });
+            if (window.updateOnlineRoomState) {
+              window.updateOnlineRoomState({ ...room, roomCode, role });
+            }
           }
         }, 900);
       }
     };
     roomRef.on("value", roomListener, () => setNote(t().unavailable, "error"));
+
+    connectionRef = database.ref(".info/connected");
+    connectionListener = snapshot => {
+      const connected = snapshot.val() === true;
+      if (!connected) {
+        wasDisconnected = true;
+        if (window.updateOnlineConnectionStatus) window.updateOnlineConnectionStatus("reconnecting");
+      } else if (wasDisconnected) {
+        wasDisconnected = false;
+        if (window.updateOnlineConnectionStatus) window.updateOnlineConnectionStatus("restored");
+      }
+    };
+    connectionRef.on("value", connectionListener);
+  }
+
+  async function resumeSavedRoom() {
+    const saved = loadConnection();
+    if (!saved || roomRef) return false;
+    try {
+      const user = await ensureSignedIn();
+      const reference = database.ref(`rooms/${saved.roomCode}`);
+      const snapshot = await waitForServerRoom(reference, 7000);
+      if (!snapshot?.exists()) {
+        clearConnection();
+        if (window.clearOnlineRecoveryState) window.clearOnlineRecoveryState();
+        return false;
+      }
+      const room = snapshot.val();
+      const ownsSeat = saved.role === "host"
+        ? room.hostUid === user.uid
+        : room.guestUid === user.uid;
+      if (!ownsSeat) {
+        clearConnection();
+        if (window.clearOnlineRecoveryState) window.clearOnlineRecoveryState();
+        return false;
+      }
+      roomRef = reference;
+      roomCode = saved.roomCode;
+      role = saved.role;
+      statusKey = room.status === "connected" ? "connected" : "waiting";
+      placementEntered = false;
+      if (codeInput()) codeInput().value = roomCode;
+      setNote(language() === "mn" ? "Тоглолтыг сэргээж байна…" : "Recovering match…", "busy");
+      listenToRoom();
+      return true;
+    } catch (error) {
+      console.error("Online recovery failed", error);
+      return false;
+    }
   }
 
   async function copyCurrentCode() {
@@ -234,9 +322,10 @@
         roomRef = candidateRef;
         roomCode = candidate;
         role = "host";
+        saveConnection(Number(document.getElementById("difficulty")?.value) || 8);
         statusKey = "waiting";
         if (codeInput()) codeInput().value = candidate;
-        await roomRef.onDisconnect().remove();
+        await roomRef.onDisconnect().cancel();
         listenToRoom();
         setNote(t().waiting(candidate), "waiting");
         restoreCreateLabel();
@@ -295,12 +384,9 @@
       roomRef = candidateRef;
       roomCode = candidate;
       role = "guest";
+      saveConnection(current.difficulty);
       statusKey = "connected";
-      await roomRef.onDisconnect().update({
-        guestUid: null,
-        guestReady: null,
-        status: "waiting"
-      });
+      await roomRef.onDisconnect().cancel();
       listenToRoom();
       setNote(t().connected(candidate), "connected");
       setBusy(false);
@@ -323,6 +409,8 @@
     roomCode = "";
     role = "";
     statusKey = "";
+    clearConnection();
+    if (window.clearOnlineRecoveryState) window.clearOnlineRecoveryState();
     try {
       await reference.onDisconnect().cancel();
       if (currentRole === "host") await reference.remove();
@@ -456,4 +544,8 @@
     hasRoom: () => Boolean(roomRef),
     getSession: () => ({ roomCode, role })
   };
+
+  window.addEventListener("load", () => {
+    setTimeout(resumeSavedRoom, 350);
+  });
 })();
