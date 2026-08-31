@@ -47,6 +47,9 @@ let onlineConnectionTimer = null;
 let onlineOpponentConnected = true;
 let onlineOpponentMessage = '';
 let onlineOpponentTimer = null;
+let onlineOpponentPresenceFlag = true;
+let onlineOpponentLastSeen = 0;
+let onlineLastGameSignature = '';
 
 const ONLINE_RECOVERY_KEY = 'planeRadarOnlineRecovery_v1';
 
@@ -1116,6 +1119,9 @@ window.enterOnlinePlacement = session => {
   onlineResultShown = false;
   onlineOpponentConnected = true;
   onlineOpponentMessage = '';
+  onlineOpponentPresenceFlag = true;
+  onlineOpponentLastSeen = 0;
+  onlineLastGameSignature = '';
 
   const difficulty = document.getElementById('difficulty');
   const roomDifficulty = ['5', '8', '10'].includes(String(session.difficulty))
@@ -1166,19 +1172,22 @@ window.updateOnlineConnectionStatus = state => {
   }
 };
 
-function updateOpponentPresence(isOnline) {
+function updateOpponentPresence(isOnline, showImmediately = false) {
+  if (isOnline === onlineOpponentConnected) return;
   clearTimeout(onlineOpponentTimer);
   const wasOnline = onlineOpponentConnected;
   onlineOpponentConnected = isOnline;
 
   if (!isOnline) {
-    onlineOpponentTimer = setTimeout(() => {
+    const showDisconnected = () => {
       if (onlineOpponentConnected) return;
       onlineOpponentMessage = lang === 'mn'
         ? '📡 Өрсөлдөгч салсан — хүлээж байна…'
         : '📡 Opponent disconnected — waiting…';
       if (onlineBattleSession) renderBattleBoards();
-    }, 1500);
+    };
+    if (showImmediately) showDisconnected();
+    else onlineOpponentTimer = setTimeout(showDisconnected, 1500);
     return;
   }
 
@@ -1194,19 +1203,42 @@ function updateOpponentPresence(isOnline) {
   }
 }
 
+function evaluateOpponentHeartbeat() {
+  if (!onlineBattleSession) return;
+  const heartbeatFresh = !onlineOpponentLastSeen
+    || (Date.now() - onlineOpponentLastSeen) <= 9000;
+  updateOpponentPresence(onlineOpponentPresenceFlag && heartbeatFresh, !heartbeatFresh);
+}
+
+setInterval(evaluateOpponentHeartbeat, 1500);
+
 window.updateOnlineRoomState = room => {
   if (!onlineBattleSession || !room || room.roomCode !== onlineRoomCode) return;
   const localReady = onlineRole === 'host' ? room.hostReady : room.guestReady;
   const opponentReady = onlineRole === 'host' ? room.guestReady : room.hostReady;
   onlineLocalReady = Boolean(localReady);
   onlineOpponentReady = Boolean(opponentReady);
-  const opponentOnline = onlineRole === 'host'
+  onlineOpponentPresenceFlag = onlineRole === 'host'
     ? (room.guestUid ? room.guestOnline !== false : false)
     : room.hostOnline !== false;
-  updateOpponentPresence(opponentOnline);
+  onlineOpponentLastSeen = Number(onlineRole === 'host' ? room.guestSeenAt : room.hostSeenAt) || 0;
+  evaluateOpponentHeartbeat();
 
   if (room.game) {
-    handleOnlineGameState(room.game);
+    const gameSignature = JSON.stringify([
+      room.game.sequence,
+      room.game.turn,
+      room.game.shotsLeft,
+      room.game.hostHits,
+      room.game.guestHits,
+      room.game.winner,
+      room.game.lastShot?.result,
+      room.game.lastShot?.resolvedAt
+    ]);
+    if (gameSignature !== onlineLastGameSignature) {
+      onlineLastGameSignature = gameSignature;
+      handleOnlineGameState(room.game);
+    }
   } else if (onlineLocalReady && onlineOpponentReady) {
     battlePhase = 'online-ready';
   } else if (battlePhase === 'online-ready') {
@@ -1340,6 +1372,9 @@ window.handleOnlineRoomClosed = () => {
   onlineConnectionMessage = '';
   onlineOpponentConnected = true;
   onlineOpponentMessage = '';
+  onlineOpponentPresenceFlag = true;
+  onlineOpponentLastSeen = 0;
+  onlineLastGameSignature = '';
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
@@ -1375,6 +1410,9 @@ async function leaveOnlineBattle() {
   onlineConnectionMessage = '';
   onlineOpponentConnected = true;
   onlineOpponentMessage = '';
+  onlineOpponentPresenceFlag = true;
+  onlineOpponentLastSeen = 0;
+  onlineLastGameSignature = '';
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;

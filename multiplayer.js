@@ -1,4 +1,4 @@
-// Plane Radar V5.0.6.1 — Firebase recovery and opponent presence
+// Plane Radar V5.0.6.2 — Firebase recovery and presence heartbeat
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -59,6 +59,7 @@
   let connectionRef = null;
   let connectionListener = null;
   let wasDisconnected = false;
+  let heartbeatTimer = null;
 
   function saveConnection(difficulty) {
     if (!roomCode || !role) return;
@@ -86,6 +87,22 @@
     try { localStorage.removeItem(CONNECTION_KEY); } catch (_) {}
   }
 
+  function stopHeartbeat() {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  function startHeartbeat() {
+    stopHeartbeat();
+    if (!roomRef || !role) return;
+    const field = role === "host" ? "hostSeenAt" : "guestSeenAt";
+    const beat = () => {
+      if (roomRef) roomRef.child(field).set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
+    };
+    beat();
+    heartbeatTimer = setInterval(beat, 4000);
+  }
+
   async function configurePresence() {
     if (!roomRef || !role) return;
     const field = role === "host" ? "hostOnline" : "guestOnline";
@@ -93,6 +110,7 @@
     try {
       await presenceRef.onDisconnect().set(false);
       await presenceRef.set(true);
+      startHeartbeat();
     } catch (error) {
       console.error("Online presence update failed", error);
     }
@@ -182,6 +200,7 @@
   }
 
   function stopListening() {
+    stopHeartbeat();
     if (roomRef && roomListener) roomRef.off("value", roomListener);
     if (connectionRef && connectionListener) connectionRef.off("value", connectionListener);
     roomListener = null;
@@ -241,6 +260,7 @@
     connectionListener = snapshot => {
       const connected = snapshot.val() === true;
       if (!connected) {
+        stopHeartbeat();
         wasDisconnected = true;
         if (window.updateOnlineConnectionStatus) window.updateOnlineConnectionStatus("reconnecting");
       } else if (wasDisconnected) {
@@ -330,7 +350,8 @@
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             difficulty: Number(document.getElementById("difficulty")?.value) || 8,
             hostReady: false,
-            hostOnline: true
+            hostOnline: true,
+            hostSeenAt: firebase.database.ServerValue.TIMESTAMP
           };
         }, undefined, false);
         if (!result.committed) continue;
@@ -395,6 +416,7 @@
         guestUid: user.uid,
         guestReady: false,
         guestOnline: true,
+        guestSeenAt: firebase.database.ServerValue.TIMESTAMP,
         status: "connected"
       });
       roomRef = candidateRef;
@@ -430,7 +452,13 @@
     try {
       await reference.onDisconnect().cancel();
       if (currentRole === "host") await reference.remove();
-      else await reference.update({ guestUid: null, guestReady: null, guestOnline: null, status: "waiting" });
+      else await reference.update({
+        guestUid: null,
+        guestReady: null,
+        guestOnline: null,
+        guestSeenAt: null,
+        status: "waiting"
+      });
     } catch (_) {
       // onDisconnect remains the fallback if the network disappears.
     }

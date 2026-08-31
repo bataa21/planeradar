@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plane-radar-v5-0-6-1';
+const CACHE_NAME = 'plane-radar-v5-0-6-2';
 const APP_FILES = [
   './',
   './index.html',
