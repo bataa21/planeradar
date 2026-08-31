@@ -51,6 +51,9 @@ let onlineOpponentTimer = null;
 let onlineOpponentPresenceFlag = true;
 let onlineOpponentLastSeen = 0;
 let onlineLastGameSignature = '';
+let onlineMatchNumber = 1;
+let onlineLocalRematch = false;
+let onlineOpponentRematch = false;
 
 const ONLINE_RECOVERY_KEY = 'planeRadarOnlineRecovery_v1';
 
@@ -706,22 +709,80 @@ function showBattleResult(playerWon) {
     `${t.battleScoreYou}: ${playerBattleHits}/${enemyPlaneTotal} · ` +
     `${t.battleScoreEnemy}: ${enemyBattleHits}/${playerPlanes.length}`;
 
-  const button = document.createElement('button');
-  button.textContent = onlineBattleSession
-    ? (lang === 'mn' ? '← Өрөөнөөс гарах' : '← Leave Room')
-    : `🔄 ${t.playAgain}`;
-  button.addEventListener('click', () => {
-    backdrop.remove();
-    if (onlineBattleSession) leaveOnlineBattle();
-    else restartGame();
-  });
-
   modal.appendChild(closeButton);
   modal.appendChild(title);
   modal.appendChild(score);
-  modal.appendChild(button);
+
+  if (onlineBattleSession) {
+    const rematchStatus = document.createElement('div');
+    rematchStatus.id = 'onlineRematchStatus';
+    rematchStatus.className = 'battle-rematch-status';
+
+    const actions = document.createElement('div');
+    actions.className = 'battle-result-actions';
+
+    const rematchButton = document.createElement('button');
+    rematchButton.id = 'onlineRematchBtn';
+    rematchButton.addEventListener('click', async () => {
+      if (onlineLocalRematch) return;
+      onlineLocalRematch = true;
+      updateOnlineRematchModal();
+      const success = window.PlaneRadarOnline
+        ? await window.PlaneRadarOnline.requestRematch()
+        : false;
+      if (!success) {
+        onlineLocalRematch = false;
+        updateOnlineRematchModal();
+      }
+    });
+
+    const leaveButton = document.createElement('button');
+    leaveButton.textContent = lang === 'mn' ? '← Өрөөнөөс гарах' : '← Leave Room';
+    leaveButton.addEventListener('click', () => {
+      backdrop.remove();
+      leaveOnlineBattle();
+    });
+
+    actions.appendChild(rematchButton);
+    actions.appendChild(leaveButton);
+    modal.appendChild(rematchStatus);
+    modal.appendChild(actions);
+    setTimeout(updateOnlineRematchModal, 0);
+  } else {
+    const button = document.createElement('button');
+    button.textContent = `🔄 ${t.playAgain}`;
+    button.addEventListener('click', () => {
+      backdrop.remove();
+      restartGame();
+    });
+    modal.appendChild(button);
+  }
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
+}
+
+function updateOnlineRematchModal() {
+  const status = document.getElementById('onlineRematchStatus');
+  const button = document.getElementById('onlineRematchBtn');
+  if (!status || !button) return;
+
+  if (onlineLocalRematch && onlineOpponentRematch) {
+    status.textContent = lang === 'mn' ? '🔄 Дахин тоглолтыг эхлүүлж байна…' : '🔄 Starting rematch…';
+    button.textContent = lang === 'mn' ? '✓ Зөвшөөрсөн' : '✓ Accepted';
+    button.disabled = true;
+  } else if (onlineLocalRematch) {
+    status.textContent = lang === 'mn' ? '⏳ Өрсөлдөгчийг хүлээж байна…' : '⏳ Waiting for opponent…';
+    button.textContent = lang === 'mn' ? '✓ Хүсэлт илгээсэн' : '✓ Rematch requested';
+    button.disabled = true;
+  } else if (onlineOpponentRematch) {
+    status.textContent = lang === 'mn' ? '🔄 Өрсөлдөгч дахин тоглохыг хүсэж байна!' : '🔄 Opponent wants a rematch!';
+    button.textContent = lang === 'mn' ? '🔄 Зөвшөөрөх' : '🔄 Accept Rematch';
+    button.disabled = false;
+  } else {
+    status.textContent = lang === 'mn' ? 'Дахин тоглох уу?' : 'Play again with the same opponent?';
+    button.textContent = lang === 'mn' ? '🔄 Дахин тоглох' : '🔄 Rematch';
+    button.disabled = false;
+  }
 }
 
 function battlePlaneCount() {
@@ -1124,6 +1185,9 @@ window.enterOnlinePlacement = session => {
   onlineOpponentPresenceFlag = true;
   onlineOpponentLastSeen = 0;
   onlineLastGameSignature = '';
+  onlineMatchNumber = Number(session.matchNumber || 1);
+  onlineLocalRematch = false;
+  onlineOpponentRematch = false;
 
   const difficulty = document.getElementById('difficulty');
   const roomDifficulty = ['5', '8', '10'].includes(String(session.difficulty))
@@ -1158,6 +1222,29 @@ window.enterOnlinePlacement = session => {
   renderBattleBoards();
   if (canRecover && onlineGameStarted) startGameTimer();
   updateLanguageUI();
+};
+
+window.updateOnlineRematchState = room => {
+  if (!onlineBattleSession || !room || room.roomCode !== onlineRoomCode) return;
+  onlineLocalRematch = Boolean(onlineRole === 'host' ? room.hostRematch : room.guestRematch);
+  onlineOpponentRematch = Boolean(onlineRole === 'host' ? room.guestRematch : room.hostRematch);
+  updateOnlineRematchModal();
+};
+
+window.enterOnlineRematch = session => {
+  if (!onlineBattleSession) return;
+  document.querySelector('.battle-modal-backdrop')?.remove();
+  clearOnlineRecoveryState();
+  onlineMatchNumber = Number(session?.matchNumber || onlineMatchNumber + 1);
+  onlineLocalRematch = false;
+  onlineOpponentRematch = false;
+  onlineLastGameSignature = '';
+  onlineRecovering = true;
+  restartGame();
+  onlineRecovering = false;
+  document.getElementById('difficulty').disabled = true;
+  document.getElementById('restartBtn').disabled = true;
+  renderBattleBoards();
 };
 
 window.updateOnlineConnectionStatus = state => {
@@ -1388,6 +1475,8 @@ window.handleOnlineRoomClosed = () => {
   onlineOpponentPresenceFlag = true;
   onlineOpponentLastSeen = 0;
   onlineLastGameSignature = '';
+  onlineLocalRematch = false;
+  onlineOpponentRematch = false;
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
@@ -1427,6 +1516,8 @@ async function leaveOnlineBattle() {
   onlineOpponentPresenceFlag = true;
   onlineOpponentLastSeen = 0;
   onlineLastGameSignature = '';
+  onlineLocalRematch = false;
+  onlineOpponentRematch = false;
   clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;

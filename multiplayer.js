@@ -1,4 +1,4 @@
-// Plane Radar V5.0.6.3 — Presence heartbeat with deduplicated notices
+// Plane Radar V5.0.7 — Online rematch
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -60,6 +60,8 @@
   let connectionListener = null;
   let wasDisconnected = false;
   let heartbeatTimer = null;
+  let currentMatchNumber = 0;
+  let rematchResetting = false;
 
   function saveConnection(difficulty) {
     if (!roomCode || !role) return;
@@ -226,6 +228,7 @@
         return;
       }
       const room = snapshot.val();
+      const incomingMatchNumber = Number(room.matchNumber || 1);
       saveConnection(room.difficulty);
       statusKey = room.status === "connected" && room.guestUid ? "connected" : "waiting";
       setNote(t()[statusKey](roomCode), statusKey);
@@ -233,8 +236,26 @@
       if (window.updateOnlineRoomState) {
         window.updateOnlineRoomState({ ...room, roomCode, role });
       }
+      if (window.updateOnlineRematchState) {
+        window.updateOnlineRematchState({ ...room, roomCode, role });
+      }
+      if (role === "host" && !room.guestUid && room.hostRematch) {
+        roomRef.child("hostRematch").set(false).catch(() => {});
+      }
+      if (!currentMatchNumber) {
+        currentMatchNumber = incomingMatchNumber;
+      } else if (incomingMatchNumber > currentMatchNumber) {
+        currentMatchNumber = incomingMatchNumber;
+        rematchResetting = false;
+        if (window.enterOnlineRematch) {
+          window.enterOnlineRematch({ matchNumber: currentMatchNumber });
+        }
+      }
+      if (room.game?.winner && room.hostRematch && room.guestRematch && role === "host") {
+        resetForRematch(incomingMatchNumber);
+      }
       if (room.hostReady && room.guestReady && !room.game && role === "host") {
-        initializeOnlineGame(room.difficulty);
+        initializeOnlineGame(room.difficulty, incomingMatchNumber);
       }
       if (statusKey === "connected" && !placementEntered) {
         placementEntered = true;
@@ -245,6 +266,7 @@
               roomCode,
               role,
               difficulty: Number(room.difficulty) || 8,
+              matchNumber: incomingMatchNumber,
               recovered: Boolean(loadConnection())
             });
             if (window.updateOnlineRoomState) {
@@ -296,6 +318,7 @@
       roomRef = reference;
       roomCode = saved.roomCode;
       role = saved.role;
+      currentMatchNumber = Number(room.matchNumber || 1);
       statusKey = room.status === "connected" ? "connected" : "waiting";
       placementEntered = false;
       if (codeInput()) codeInput().value = roomCode;
@@ -350,6 +373,8 @@
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             difficulty: Number(document.getElementById("difficulty")?.value) || 8,
             hostReady: false,
+            hostRematch: false,
+            matchNumber: 1,
             hostOnline: true,
             hostSeenAt: firebase.database.ServerValue.TIMESTAMP
           };
@@ -358,6 +383,7 @@
         roomRef = candidateRef;
         roomCode = candidate;
         role = "host";
+        currentMatchNumber = 1;
         saveConnection(Number(document.getElementById("difficulty")?.value) || 8);
         statusKey = "waiting";
         if (codeInput()) codeInput().value = candidate;
@@ -415,6 +441,7 @@
       await candidateRef.update({
         guestUid: user.uid,
         guestReady: false,
+        guestRematch: false,
         guestOnline: true,
         guestSeenAt: firebase.database.ServerValue.TIMESTAMP,
         status: "connected"
@@ -422,6 +449,7 @@
       roomRef = candidateRef;
       roomCode = candidate;
       role = "guest";
+      currentMatchNumber = Number(current.matchNumber || 1);
       saveConnection(current.difficulty);
       statusKey = "connected";
       await configurePresence();
@@ -446,6 +474,8 @@
     roomRef = null;
     roomCode = "";
     role = "";
+    currentMatchNumber = 0;
+    rematchResetting = false;
     statusKey = "";
     clearConnection();
     if (window.clearOnlineRecoveryState) window.clearOnlineRecoveryState();
@@ -455,6 +485,7 @@
       else await reference.update({
         guestUid: null,
         guestReady: null,
+        guestRematch: null,
         guestOnline: null,
         guestSeenAt: null,
         status: "waiting"
@@ -477,19 +508,51 @@
     }
   }
 
+  async function requestRematch() {
+    if (!roomRef || !role) return false;
+    const field = role === "host" ? "hostRematch" : "guestRematch";
+    try {
+      await roomRef.child(field).set(true);
+      return true;
+    } catch (error) {
+      console.error("Rematch request failed", error);
+      return false;
+    }
+  }
+
+  async function resetForRematch(matchNumber) {
+    if (!roomRef || role !== "host" || rematchResetting) return false;
+    rematchResetting = true;
+    try {
+      await roomRef.update({
+        hostReady: false,
+        guestReady: false,
+        hostRematch: false,
+        guestRematch: false,
+        matchNumber: Number(matchNumber || 1) + 1,
+        game: null
+      });
+      return true;
+    } catch (error) {
+      rematchResetting = false;
+      console.error("Rematch reset failed", error);
+      return false;
+    }
+  }
+
   function volleyForDifficulty(difficulty) {
     if (Number(difficulty) <= 5) return 3;
     if (Number(difficulty) <= 8) return 4;
     return 6;
   }
 
-  async function initializeOnlineGame(difficulty) {
+  async function initializeOnlineGame(difficulty, matchNumber = currentMatchNumber || 1) {
     if (!roomRef || role !== "host") return false;
     try {
       const result = await roomRef.child("game").transaction(current => {
         if (current) return;
         return {
-          turn: "host",
+          turn: Number(matchNumber) % 2 === 0 ? "guest" : "host",
           shotsLeft: volleyForDifficulty(difficulty),
           sequence: 0,
           hostHits: 0,
@@ -582,6 +645,7 @@
     joinRoom,
     leaveRoom,
     setReady,
+    requestRematch,
     sendShot,
     resolveShot,
     refreshLanguage,
