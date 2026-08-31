@@ -44,6 +44,9 @@ let onlineResultShown = false;
 let onlineRecovering = false;
 let onlineConnectionMessage = '';
 let onlineConnectionTimer = null;
+let onlineOpponentConnected = true;
+let onlineOpponentMessage = '';
+let onlineOpponentTimer = null;
 
 const ONLINE_RECOVERY_KEY = 'planeRadarOnlineRecovery_v1';
 
@@ -908,6 +911,13 @@ function renderBattleBoards() {
     wrap.appendChild(connectionNotice);
   }
 
+  if (onlineBattleSession && onlineOpponentMessage) {
+    const opponentNotice = document.createElement('div');
+    opponentNotice.className = 'placement-status' + (onlineOpponentMessage.startsWith('✅') ? ' ready' : '');
+    opponentNotice.textContent = onlineOpponentMessage;
+    wrap.appendChild(opponentNotice);
+  }
+
   if (battleVolleyNotice) {
     const notice = document.createElement('div');
     notice.className = 'battle-volley-notice';
@@ -1104,6 +1114,8 @@ window.enterOnlinePlacement = session => {
   onlineShotSending = false;
   onlineGameStarted = false;
   onlineResultShown = false;
+  onlineOpponentConnected = true;
+  onlineOpponentMessage = '';
 
   const difficulty = document.getElementById('difficulty');
   const roomDifficulty = ['5', '8', '10'].includes(String(session.difficulty))
@@ -1154,12 +1166,44 @@ window.updateOnlineConnectionStatus = state => {
   }
 };
 
+function updateOpponentPresence(isOnline) {
+  clearTimeout(onlineOpponentTimer);
+  const wasOnline = onlineOpponentConnected;
+  onlineOpponentConnected = isOnline;
+
+  if (!isOnline) {
+    onlineOpponentTimer = setTimeout(() => {
+      if (onlineOpponentConnected) return;
+      onlineOpponentMessage = lang === 'mn'
+        ? '📡 Өрсөлдөгч салсан — хүлээж байна…'
+        : '📡 Opponent disconnected — waiting…';
+      if (onlineBattleSession) renderBattleBoards();
+    }, 1500);
+    return;
+  }
+
+  if (!wasOnline) {
+    onlineOpponentMessage = lang === 'mn'
+      ? '✅ Өрсөлдөгч дахин холбогдлоо'
+      : '✅ Opponent reconnected';
+    if (onlineBattleSession) renderBattleBoards();
+    onlineOpponentTimer = setTimeout(() => {
+      onlineOpponentMessage = '';
+      if (onlineBattleSession) renderBattleBoards();
+    }, 2200);
+  }
+}
+
 window.updateOnlineRoomState = room => {
   if (!onlineBattleSession || !room || room.roomCode !== onlineRoomCode) return;
   const localReady = onlineRole === 'host' ? room.hostReady : room.guestReady;
   const opponentReady = onlineRole === 'host' ? room.guestReady : room.hostReady;
   onlineLocalReady = Boolean(localReady);
   onlineOpponentReady = Boolean(opponentReady);
+  const opponentOnline = onlineRole === 'host'
+    ? (room.guestUid ? room.guestOnline !== false : false)
+    : room.hostOnline !== false;
+  updateOpponentPresence(opponentOnline);
 
   if (room.game) {
     handleOnlineGameState(room.game);
@@ -1172,7 +1216,7 @@ window.updateOnlineRoomState = room => {
 };
 
 async function onlineBattleShot(row, col) {
-  if (!onlineBattleSession || battlePhase !== 'player' || onlineShotSending) return;
+  if (!onlineBattleSession || battlePhase !== 'player' || onlineShotSending || !onlineOpponentConnected) return;
   const key = shotKey(row, col);
   if (playerShotHistory.has(key)) return;
   onlineShotSending = true;
@@ -1294,6 +1338,9 @@ window.handleOnlineRoomClosed = () => {
   onlineGameStarted = false;
   onlineResultShown = false;
   onlineConnectionMessage = '';
+  onlineOpponentConnected = true;
+  onlineOpponentMessage = '';
+  clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
   document.getElementById('restartBtn').disabled = false;
@@ -1326,6 +1373,9 @@ async function leaveOnlineBattle() {
   onlineGameStarted = false;
   onlineResultShown = false;
   onlineConnectionMessage = '';
+  onlineOpponentConnected = true;
+  onlineOpponentMessage = '';
+  clearTimeout(onlineOpponentTimer);
   clearOnlineRecoveryState();
   document.getElementById('difficulty').disabled = false;
   document.getElementById('restartBtn').disabled = false;

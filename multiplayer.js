@@ -1,4 +1,4 @@
-// Plane Radar V5.0.6 — Firebase room connection and recovery
+// Plane Radar V5.0.6.1 — Firebase recovery and opponent presence
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -84,6 +84,18 @@
 
   function clearConnection() {
     try { localStorage.removeItem(CONNECTION_KEY); } catch (_) {}
+  }
+
+  async function configurePresence() {
+    if (!roomRef || !role) return;
+    const field = role === "host" ? "hostOnline" : "guestOnline";
+    const presenceRef = roomRef.child(field);
+    try {
+      await presenceRef.onDisconnect().set(false);
+      await presenceRef.set(true);
+    } catch (error) {
+      console.error("Online presence update failed", error);
+    }
   }
 
   const language = () => window.getPlaneRadarLanguage
@@ -235,6 +247,7 @@
         wasDisconnected = false;
         if (window.updateOnlineConnectionStatus) window.updateOnlineConnectionStatus("restored");
       }
+      if (connected) configurePresence();
     };
     connectionRef.on("value", connectionListener);
   }
@@ -267,6 +280,7 @@
       placementEntered = false;
       if (codeInput()) codeInput().value = roomCode;
       setNote(language() === "mn" ? "Тоглолтыг сэргээж байна…" : "Recovering match…", "busy");
+      await configurePresence();
       listenToRoom();
       return true;
     } catch (error) {
@@ -315,7 +329,8 @@
             status: "waiting",
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             difficulty: Number(document.getElementById("difficulty")?.value) || 8,
-            hostReady: false
+            hostReady: false,
+            hostOnline: true
           };
         }, undefined, false);
         if (!result.committed) continue;
@@ -325,7 +340,7 @@
         saveConnection(Number(document.getElementById("difficulty")?.value) || 8);
         statusKey = "waiting";
         if (codeInput()) codeInput().value = candidate;
-        await roomRef.onDisconnect().cancel();
+        await configurePresence();
         listenToRoom();
         setNote(t().waiting(candidate), "waiting");
         restoreCreateLabel();
@@ -379,6 +394,7 @@
       await candidateRef.update({
         guestUid: user.uid,
         guestReady: false,
+        guestOnline: true,
         status: "connected"
       });
       roomRef = candidateRef;
@@ -386,7 +402,7 @@
       role = "guest";
       saveConnection(current.difficulty);
       statusKey = "connected";
-      await roomRef.onDisconnect().cancel();
+      await configurePresence();
       listenToRoom();
       setNote(t().connected(candidate), "connected");
       setBusy(false);
@@ -414,7 +430,7 @@
     try {
       await reference.onDisconnect().cancel();
       if (currentRole === "host") await reference.remove();
-      else await reference.update({ guestUid: null, guestReady: null, status: "waiting" });
+      else await reference.update({ guestUid: null, guestReady: null, guestOnline: null, status: "waiting" });
     } catch (_) {
       // onDisconnect remains the fallback if the network disappears.
     }
