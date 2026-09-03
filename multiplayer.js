@@ -1,4 +1,4 @@
-// Plane Radar V5.0.8 — Online series score
+// Plane Radar V5.0.8.1 — Draggable result window
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {

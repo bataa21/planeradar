@@ -703,6 +703,7 @@ function showBattleResult(playerWon) {
   const title = document.createElement('div');
   title.className = 'battle-result-title';
   title.textContent = playerWon ? t.battleWin : t.battleLose;
+  title.title = lang === 'mn' ? 'Цонхыг зөөхийн тулд чирнэ үү' : 'Drag to move this window';
 
   const score = document.createElement('div');
   const enemyPlaneTotal = onlineBattleSession ? battlePlaneCount() : enemyPlanes.length;
@@ -767,6 +768,59 @@ function showBattleResult(playerWon) {
   }
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
+  makeBattleResultDraggable(modal, title);
+}
+
+function makeBattleResultDraggable(modal, handle) {
+  if (!modal || !handle || !window.PointerEvent) return;
+
+  let activePointer = null;
+  let grabOffsetX = 0;
+  let grabOffsetY = 0;
+
+  const moveTo = (clientX, clientY) => {
+    const margin = 8;
+    const width = modal.offsetWidth;
+    const height = modal.offsetHeight;
+    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - height - margin);
+    const left = Math.min(maxLeft, Math.max(margin, clientX - grabOffsetX));
+    const top = Math.min(maxTop, Math.max(margin, clientY - grabOffsetY));
+    modal.style.left = `${left}px`;
+    modal.style.top = `${top}px`;
+  };
+
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== undefined && event.button !== 0) return;
+    const rect = modal.getBoundingClientRect();
+    activePointer = event.pointerId;
+    grabOffsetX = event.clientX - rect.left;
+    grabOffsetY = event.clientY - rect.top;
+    modal.style.position = 'fixed';
+    modal.style.width = `${rect.width}px`;
+    modal.style.left = `${rect.left}px`;
+    modal.style.top = `${rect.top}px`;
+    modal.style.margin = '0';
+    modal.style.transform = 'none';
+    modal.classList.add('dragging');
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', event => {
+    if (event.pointerId !== activePointer) return;
+    moveTo(event.clientX, event.clientY);
+    event.preventDefault();
+  });
+
+  const finishDrag = event => {
+    if (event.pointerId !== activePointer) return;
+    activePointer = null;
+    modal.classList.remove('dragging');
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+  };
+  handle.addEventListener('pointerup', finishDrag);
+  handle.addEventListener('pointercancel', finishDrag);
 }
 
 function onlineSeriesText() {
