@@ -1,4 +1,4 @@
-// Plane Radar V5.0.8.1 — Draggable result window
+// Plane Radar V5.0.8.2 — Silent recovery sync
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {

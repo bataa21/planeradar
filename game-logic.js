@@ -56,6 +56,7 @@ let onlineLocalSeriesWins = 0;
 let onlineOpponentSeriesWins = 0;
 let onlineLocalRematch = false;
 let onlineOpponentRematch = false;
+let onlineInitialStateSync = false;
 
 const ONLINE_RECOVERY_KEY = 'planeRadarOnlineRecovery_v1';
 
@@ -1271,6 +1272,9 @@ window.enterOnlinePlacement = session => {
   onlineOpponentSeriesWins = 0;
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
+  // The first room snapshot describes state that already existed before this
+  // page instance opened. Rebuild it silently so its last shot is not replayed.
+  onlineInitialStateSync = true;
 
   const difficulty = document.getElementById('difficulty');
   const roomDifficulty = ['5', '8', '10'].includes(String(session.difficulty))
@@ -1322,6 +1326,7 @@ window.enterOnlineRematch = session => {
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
   onlineLastGameSignature = '';
+  onlineInitialStateSync = false;
   onlineRecovering = true;
   restartGame();
   onlineRecovering = false;
@@ -1425,7 +1430,9 @@ window.updateOnlineRoomState = room => {
     ]);
     if (gameSignature !== onlineLastGameSignature) {
       onlineLastGameSignature = gameSignature;
-      handleOnlineGameState(room.game);
+      const silentSync = onlineInitialStateSync;
+      onlineInitialStateSync = false;
+      handleOnlineGameState(room.game, { silent: silentSync });
     }
   } else if (onlineLocalReady && onlineOpponentReady) {
     battlePhase = 'online-ready';
@@ -1480,12 +1487,12 @@ async function resolveIncomingOnlineShot(shot) {
   }
 }
 
-function handleOnlineGameState(game) {
+function handleOnlineGameState(game, { silent = false } = {}) {
   if (!game || !onlineBattleSession) return;
   if (!onlineGameStarted) {
     onlineGameStarted = true;
     startGameTimer();
-    playBattleStartCue();
+    if (!silent) playBattleStartCue();
   }
 
   playerBattleHits = onlineRole === 'host'
@@ -1512,8 +1519,8 @@ function handleOnlineGameState(game) {
         : {};
       if (shot.result === 'hit') {
         onlineEnemyHitCells.add(key);
-        playSound(battleExplodeSound);
-      } else {
+        if (!silent) playSound(battleExplodeSound);
+      } else if (!silent) {
         playSound(battleHitSound);
       }
       onlineShotSending = false;
@@ -1538,7 +1545,7 @@ function handleOnlineGameState(game) {
   const previousPhase = battlePhase;
   battlePhase = game.turn === onlineRole ? 'player' : 'bot';
   renderBattleBoards();
-  if (previousPhase !== battlePhase && battlePhase === 'player') {
+  if (!silent && previousPhase !== battlePhase && battlePhase === 'player') {
     setTimeout(playPlayerTurnCue, 180);
   }
 }
@@ -1566,6 +1573,7 @@ window.handleOnlineRoomClosed = () => {
   onlineLastGameSignature = '';
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
+  onlineInitialStateSync = false;
   onlineLocalSeriesWins = 0;
   onlineOpponentSeriesWins = 0;
   clearTimeout(onlineOpponentTimer);
@@ -1609,6 +1617,7 @@ async function leaveOnlineBattle() {
   onlineLastGameSignature = '';
   onlineLocalRematch = false;
   onlineOpponentRematch = false;
+  onlineInitialStateSync = false;
   onlineLocalSeriesWins = 0;
   onlineOpponentSeriesWins = 0;
   clearTimeout(onlineOpponentTimer);
