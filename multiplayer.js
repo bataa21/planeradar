@@ -1,4 +1,4 @@
-// Plane Radar V5.0.8.2 — Silent recovery sync
+// Plane Radar V5.0.9 — Shareable room invitation
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -20,6 +20,11 @@
       connected: code => `✅ Friend connected · Room ${code}`,
       copied: code => `Room code ${code} copied.`,
       copyCode: code => `📋 Copy ${code}`,
+      shareRoom: "🔗 Share",
+      inviteText: code => `Join my Plane Radar room ${code}!`,
+      shared: "✅ Invitation shared.",
+      linkCopied: "✅ Invitation link copied.",
+      shareFailed: "Could not share the invitation. Please copy the room code.",
       roomMissing: "Room not found. Check the six-digit code.",
       roomFull: "That room already has two players.",
       ownRoom: "Open this code on your friend’s device.",
@@ -36,6 +41,11 @@
       connected: code => `✅ Найз холбогдлоо · Өрөө ${code}`,
       copied: code => `Өрөөний ${code} код хуулагдлаа.`,
       copyCode: code => `📋 ${code} хуулах`,
+      shareRoom: "🔗 Урилга",
+      inviteText: code => `Онгоцны Радар тоглоомын ${code} өрөөнд нэгдээрэй!`,
+      shared: "✅ Урилгыг хуваалцлаа.",
+      linkCopied: "✅ Урилгын холбоос хуулагдлаа.",
+      shareFailed: "Урилгыг хуваалцаж чадсангүй. Өрөөний кодыг хуулна уу.",
       roomMissing: "Өрөө олдсонгүй. 6 оронтой кодоо шалгана уу.",
       roomFull: "Энэ өрөөнд хоёр тоглогч холбогдсон байна.",
       ownRoom: "Энэ кодыг найзынхаа төхөөрөмж дээр оруулна уу.",
@@ -125,6 +135,7 @@
   const note = () => document.getElementById("battleEntryNote");
   const createButton = () => document.getElementById("createRoomBtn");
   const joinButton = () => document.getElementById("joinRoomBtn");
+  const shareButton = () => document.getElementById("shareRoomBtn");
   const codeInput = () => document.getElementById("roomCodeInput");
 
   function setNote(message, state = "") {
@@ -137,6 +148,7 @@
   function setBusy(busy) {
     if (createButton()) createButton().disabled = busy;
     if (joinButton()) joinButton().disabled = busy;
+    if (shareButton()) shareButton().disabled = busy;
     if (codeInput()) codeInput().disabled = busy;
   }
 
@@ -150,6 +162,14 @@
     const base = window.getPlaneRadarText ? window.getPlaneRadarText("createRoom") : "Create Room";
     createButton().textContent = `➕ ${base}`;
     createButton().disabled = false;
+  }
+
+  function restoreShareButton() {
+    if (!shareButton()) return;
+    const canInvite = role === "host" && roomCode && statusKey === "waiting";
+    shareButton().hidden = !canInvite;
+    shareButton().disabled = false;
+    shareButton().textContent = t().shareRoom;
   }
 
   function initialize() {
@@ -224,6 +244,7 @@
         roomCode = "";
         role = "";
         restoreCreateLabel();
+        restoreShareButton();
         if (window.handleOnlineRoomClosed) window.handleOnlineRoomClosed();
         return;
       }
@@ -233,6 +254,7 @@
       statusKey = room.status === "connected" && room.guestUid ? "connected" : "waiting";
       setNote(t()[statusKey](roomCode), statusKey);
       restoreCreateLabel();
+      restoreShareButton();
       if (window.updateOnlineRoomState) {
         window.updateOnlineRoomState({ ...room, roomCode, role });
       }
@@ -347,6 +369,66 @@
     }
   }
 
+  function invitationUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", roomCode);
+    url.hash = "";
+    return url.toString();
+  }
+
+  async function copyInvitationLink(url) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return;
+    }
+    const helper = document.createElement("textarea");
+    helper.value = url;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "fixed";
+    helper.style.opacity = "0";
+    document.body.appendChild(helper);
+    helper.select();
+    const copied = document.execCommand("copy");
+    helper.remove();
+    if (!copied) throw new Error("copy-failed");
+  }
+
+  async function shareRoomInvitation() {
+    if (role !== "host" || !roomCode) return false;
+    const url = invitationUrl();
+    const shareData = {
+      title: language() === "mn" ? "Онгоцны Радар" : "Plane Radar Game",
+      text: t().inviteText(roomCode),
+      url
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        setNote(t().shared, "success");
+      } else {
+        await copyInvitationLink(url);
+        setNote(t().linkCopied, "success");
+      }
+      setTimeout(() => {
+        if (roomCode) setNote(t()[statusKey || "waiting"](roomCode), statusKey || "waiting");
+      }, 1800);
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") return false;
+      try {
+        await copyInvitationLink(url);
+        setNote(t().linkCopied, "success");
+        setTimeout(() => {
+          if (roomCode) setNote(t()[statusKey || "waiting"](roomCode), statusKey || "waiting");
+        }, 1800);
+        return true;
+      } catch (_) {
+        setNote(t().shareFailed, "error");
+        return false;
+      }
+    }
+  }
+
   async function createRoom() {
     if (role === "host" && roomCode) {
       await copyCurrentCode();
@@ -392,6 +474,7 @@
         listenToRoom();
         setNote(t().waiting(candidate), "waiting");
         restoreCreateLabel();
+        restoreShareButton();
         setBusy(false);
         return;
       }
@@ -401,6 +484,7 @@
       setNote(t().unavailable, "error");
       setBusy(false);
       restoreCreateLabel();
+      restoreShareButton();
     }
   }
 
@@ -495,6 +579,7 @@
       // onDisconnect remains the fallback if the network disappears.
     }
     restoreCreateLabel();
+    restoreShareButton();
   }
 
   async function setReady(isReady) {
@@ -652,6 +737,7 @@
     if (!roomCode) return;
     setNote(t()[statusKey || "waiting"](roomCode), statusKey || "waiting");
     restoreCreateLabel();
+    restoreShareButton();
   }
 
   window.PlaneRadarOnline = {
@@ -660,6 +746,7 @@
     leaveRoom,
     setReady,
     requestRematch,
+    shareRoomInvitation,
     sendShot,
     resolveShot,
     refreshLanguage,
@@ -668,6 +755,10 @@
   };
 
   window.addEventListener("load", () => {
-    setTimeout(resumeSavedRoom, 350);
+    const invitedCode = (new URLSearchParams(window.location.search).get("room") || "")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+    const invited = invitedCode.length === 6;
+    if (!invited) setTimeout(resumeSavedRoom, 350);
   });
 })();

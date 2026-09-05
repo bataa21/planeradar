@@ -216,6 +216,7 @@ const texts = {
     playComputer: "Play vs Computer",
     playFriend: "Play with a Friend",
     createRoom: "Create Room",
+    shareRoom: "Share",
     roomCode: "Room code",
     joinRoom: "Join",
     back: "Back",
@@ -275,6 +276,7 @@ const texts = {
     playComputer: "Компьютертэй тоглох",
     playFriend: "Найзтайгаа тоглох",
     createRoom: "Өрөө үүсгэх",
+    shareRoom: "Урилга",
     roomCode: "Өрөөний код",
     joinRoom: "Нэгдэх",
     back: "Буцах",
@@ -290,6 +292,27 @@ function initializeGame() {
   gameMode = document.getElementById("modeSelect").value;
   updateLanguageUI();
   restartGame();
+  openRoomInvitationFromUrl();
+}
+
+function openRoomInvitationFromUrl() {
+  const url = new URL(window.location.href);
+  const code = (url.searchParams.get('room') || '').replace(/\D/g, '').slice(0, 6);
+  if (code.length !== 6) return;
+
+  openBattleEntry();
+  showBattleFriendEntry();
+  const input = document.getElementById('roomCodeInput');
+  input.value = code;
+  const note = document.getElementById('battleEntryNote');
+  note.textContent = lang === 'mn'
+    ? `✈️ ${code} өрөөний урилга ирлээ. Нэгдэх дээр дарна уу.`
+    : `✈️ Room ${code} invitation received. Tap Join.`;
+  note.dataset.state = 'connected';
+  document.getElementById('joinRoomBtn').focus();
+
+  url.searchParams.delete('room');
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 function createGrid() {
@@ -2113,6 +2136,7 @@ function refreshBattleEntryLanguage() {
   const computerBtn = document.getElementById('playComputerBtn');
   const friendBtn = document.getElementById('playFriendBtn');
   const createBtn = document.getElementById('createRoomBtn');
+  const shareBtn = document.getElementById('shareRoomBtn');
   const roomInput = document.getElementById('roomCodeInput');
   const joinBtn = document.getElementById('joinRoomBtn');
   const backBtn = document.getElementById('battleEntryBackBtn');
@@ -2125,6 +2149,7 @@ function refreshBattleEntryLanguage() {
   if (computerBtn) computerBtn.textContent = `🤖 ${t.playComputer}`;
   if (friendBtn) friendBtn.textContent = `👥 ${t.playFriend}`;
   if (createBtn) createBtn.textContent = `➕ ${t.createRoom}`;
+  if (shareBtn) shareBtn.textContent = `🔗 ${t.shareRoom}`;
   if (roomInput) {
     roomInput.placeholder = t.roomCode;
     roomInput.setAttribute('aria-label', t.roomCode);
@@ -2189,6 +2214,10 @@ document.getElementById('playComputerBtn').addEventListener('click', () => {
 });
 document.getElementById('createRoomBtn').addEventListener('click', () => {
   if (window.PlaneRadarOnline) window.PlaneRadarOnline.createRoom();
+  else showOnlinePreviewNote();
+});
+document.getElementById('shareRoomBtn').addEventListener('click', () => {
+  if (window.PlaneRadarOnline) window.PlaneRadarOnline.shareRoomInvitation();
   else showOnlinePreviewNote();
 });
 document.getElementById('joinRoomBtn').addEventListener('click', () => {
