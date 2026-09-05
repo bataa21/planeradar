@@ -8,6 +8,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Plane Radar">
+<meta name="description" content="Play Plane Radar online with a friend. Open an invitation link to join a private room.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="✈️ Plane Radar Game">
+<meta property="og:description" content="Find hidden planes by radar distance or battle a friend online.">
+<meta property="og:image" content="https://bataa21.github.io/planeradar/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta property="og:image:alt" content="Plane Radar aircraft and radar icon">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="✈️ Plane Radar Game">
+<meta name="twitter:description" content="Find hidden planes by radar distance or battle a friend online.">
+<meta name="twitter:image" content="https://bataa21.github.io/planeradar/icons/icon-512.png">
 <title>✈️ Plane Radar Game</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
@@ -776,7 +788,7 @@ body.dark-theme .update-toast{background:#20262b;color:#fff;border:1px solid #46
 body.light-theme .update-toast button{background:#f5f5f5;color:#111}
 body.dark-theme .update-toast button{background:#2a2a2a;color:#fff;border-color:#66727a}
 
-/* V5.0.9 — Shareable room invitation */
+/* V5.0.9.1 — Invitation reliability */
 .battle-entry-backdrop{position:fixed;inset:0;z-index:10015;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.34)}
 .battle-entry-backdrop.open{display:flex}
 .battle-entry-panel{position:relative;width:min(90vw,320px);padding:15px 14px 14px;border-radius:12px;box-shadow:0 14px 35px rgba(0,0,0,.28);text-align:center}
@@ -791,7 +803,7 @@ body.dark-theme .battle-entry-panel{background:rgba(32,38,43,.98);color:#fff;bor
 body.light-theme .battle-entry-actions button,body.light-theme .battle-entry-join-row button{background:#f5f5f5;color:#111}
 body.dark-theme .battle-entry-actions button,body.dark-theme .battle-entry-join-row button{background:#2a2a2a;color:#fff;border-color:#58636b}
 .battle-entry-friend[hidden],.battle-entry-home[hidden]{display:none}
-.battle-entry-join-row{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:9px}
+.battle-entry-join-row{display:grid;grid-template-columns:1fr auto auto;gap:7px;margin-top:9px}
 .battle-entry-join-row input{min-width:0;width:100%;font-family:inherit;font-size:13px;text-transform:uppercase;padding:9px;border-radius:7px;border:1px solid #aaa;text-align:center}
 .battle-entry-join-row button{width:auto;padding-inline:12px}
 .battle-entry-note{min-height:17px;margin-top:10px;font-size:11px;line-height:1.35;opacity:.82}
@@ -849,7 +861,7 @@ body.dark-theme .battle-entry-note[data-state="error"]{color:#ff8585}
       <button id="distanceHelpBtn" type="button">❓ Distance Guide</button>
       <button id="installBtn" type="button" hidden>📲 Install App</button>
     </div>
-    <div id="versionInfo" class="settings-version">Plane Radar · V5.0.9</div>
+    <div id="versionInfo" class="settings-version">Plane Radar · V5.0.9.1</div>
   </div>
 </div>
 
@@ -880,6 +892,7 @@ body.dark-theme .battle-entry-note[data-state="error"]{color:#ff8585}
       </div>
       <div class="battle-entry-join-row">
         <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Room code" aria-label="Room code">
+        <button id="pasteRoomBtn" type="button" title="Paste room code" aria-label="Paste room code">📋</button>
         <button id="joinRoomBtn" type="button">Join</button>
       </div>
       <div id="battleEntryNote" class="battle-entry-note">Create a room or enter your friend’s code.</div>

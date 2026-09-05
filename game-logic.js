@@ -217,6 +217,7 @@ const texts = {
     playFriend: "Play with a Friend",
     createRoom: "Create Room",
     shareRoom: "Share",
+    pasteRoom: "Paste room code",
     roomCode: "Room code",
     joinRoom: "Join",
     back: "Back",
@@ -277,6 +278,7 @@ const texts = {
     playFriend: "Найзтайгаа тоглох",
     createRoom: "Өрөө үүсгэх",
     shareRoom: "Урилга",
+    pasteRoom: "Өрөөний код буулгах",
     roomCode: "Өрөөний код",
     joinRoom: "Нэгдэх",
     back: "Буцах",
@@ -2137,6 +2139,7 @@ function refreshBattleEntryLanguage() {
   const friendBtn = document.getElementById('playFriendBtn');
   const createBtn = document.getElementById('createRoomBtn');
   const shareBtn = document.getElementById('shareRoomBtn');
+  const pasteBtn = document.getElementById('pasteRoomBtn');
   const roomInput = document.getElementById('roomCodeInput');
   const joinBtn = document.getElementById('joinRoomBtn');
   const backBtn = document.getElementById('battleEntryBackBtn');
@@ -2150,6 +2153,10 @@ function refreshBattleEntryLanguage() {
   if (friendBtn) friendBtn.textContent = `👥 ${t.playFriend}`;
   if (createBtn) createBtn.textContent = `➕ ${t.createRoom}`;
   if (shareBtn) shareBtn.textContent = `🔗 ${t.shareRoom}`;
+  if (pasteBtn) {
+    pasteBtn.title = t.pasteRoom;
+    pasteBtn.setAttribute('aria-label', t.pasteRoom);
+  }
   if (roomInput) {
     roomInput.placeholder = t.roomCode;
     roomInput.setAttribute('aria-label', t.roomCode);
@@ -2218,6 +2225,10 @@ document.getElementById('createRoomBtn').addEventListener('click', () => {
 });
 document.getElementById('shareRoomBtn').addEventListener('click', () => {
   if (window.PlaneRadarOnline) window.PlaneRadarOnline.shareRoomInvitation();
+  else showOnlinePreviewNote();
+});
+document.getElementById('pasteRoomBtn').addEventListener('click', () => {
+  if (window.PlaneRadarOnline) window.PlaneRadarOnline.pasteRoomCode();
   else showOnlinePreviewNote();
 });
 document.getElementById('joinRoomBtn').addEventListener('click', () => {

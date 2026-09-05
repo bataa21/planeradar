@@ -1,4 +1,4 @@
-// Plane Radar V5.0.9 — Shareable room invitation
+// Plane Radar V5.0.9.1 — Invitation reliability
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -25,7 +25,9 @@
       shared: "✅ Invitation shared.",
       linkCopied: "✅ Invitation link copied.",
       shareFailed: "Could not share the invitation. Please copy the room code.",
-      roomMissing: "Room not found. Check the six-digit code.",
+      roomMissing: "Room not found. The host may have closed it—ask for a new invitation.",
+      pasteFailed: "Clipboard access was blocked. Long-press the code box and choose Paste.",
+      pasted: code => `Room code ${code} is ready. Tap Join.`,
       roomFull: "That room already has two players.",
       ownRoom: "Open this code on your friend’s device.",
       invalidCode: "Enter the six-digit room code.",
@@ -46,7 +48,9 @@
       shared: "✅ Урилгыг хуваалцлаа.",
       linkCopied: "✅ Урилгын холбоос хуулагдлаа.",
       shareFailed: "Урилгыг хуваалцаж чадсангүй. Өрөөний кодыг хуулна уу.",
-      roomMissing: "Өрөө олдсонгүй. 6 оронтой кодоо шалгана уу.",
+      roomMissing: "Өрөө олдсонгүй. Үүсгэсэн хүн хаасан байж магадгүй—шинэ урилга авна уу.",
+      pasteFailed: "Clipboard-ийг уншиж чадсангүй. Кодын нүдийг удаан дараад Paste сонгоно уу.",
+      pasted: code => `${code} өрөөний код бэлэн боллоо. Нэгдэхийг дарна уу.`,
       roomFull: "Энэ өрөөнд хоёр тоглогч холбогдсон байна.",
       ownRoom: "Энэ кодыг найзынхаа төхөөрөмж дээр оруулна уу.",
       invalidCode: "Өрөөний 6 оронтой кодыг оруулна уу.",
@@ -136,6 +140,7 @@
   const createButton = () => document.getElementById("createRoomBtn");
   const joinButton = () => document.getElementById("joinRoomBtn");
   const shareButton = () => document.getElementById("shareRoomBtn");
+  const pasteButton = () => document.getElementById("pasteRoomBtn");
   const codeInput = () => document.getElementById("roomCodeInput");
 
   function setNote(message, state = "") {
@@ -149,6 +154,7 @@
     if (createButton()) createButton().disabled = busy;
     if (joinButton()) joinButton().disabled = busy;
     if (shareButton()) shareButton().disabled = busy;
+    if (pasteButton()) pasteButton().disabled = busy;
     if (codeInput()) codeInput().disabled = busy;
   }
 
@@ -195,7 +201,7 @@
     return String(100000 + (values[0] % 900000));
   }
 
-  function waitForServerRoom(reference, timeoutMs = 5000) {
+  function waitForServerRoom(reference, timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       let finished = false;
       const finish = value => {
@@ -370,10 +376,25 @@
   }
 
   function invitationUrl() {
-    const url = new URL(window.location.href);
+    const url = new URL(window.location.pathname, window.location.origin);
     url.searchParams.set("room", roomCode);
     url.hash = "";
     return url.toString();
+  }
+
+  async function pasteRoomCode() {
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+      const candidate = (clipboardText.match(/\b\d{6}\b/) || [""])[0];
+      if (!candidate) throw new Error("no-room-code");
+      codeInput().value = candidate;
+      codeInput().dispatchEvent(new Event("input", { bubbles: true }));
+      setNote(t().pasted(candidate), "success");
+      joinButton()?.focus();
+    } catch (_) {
+      setNote(t().pasteFailed, "error");
+      codeInput()?.focus();
+    }
   }
 
   async function copyInvitationLink(url) {
@@ -504,7 +525,7 @@
     try {
       const user = await ensureSignedIn();
       const candidateRef = database.ref(`rooms/${candidate}`);
-      const initialSnapshot = await waitForServerRoom(candidateRef);
+      const initialSnapshot = await waitForServerRoom(candidateRef, 12000);
       if (!initialSnapshot || !initialSnapshot.exists()) {
         setNote(t().roomMissing, "error");
         setBusy(false);
@@ -747,6 +768,7 @@
     setReady,
     requestRematch,
     shareRoomInvitation,
+    pasteRoomCode,
     sendShot,
     resolveShot,
     refreshLanguage,
