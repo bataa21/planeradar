@@ -1,13 +1,15 @@
-const CACHE_NAME = 'plane-radar-v5-0-9-1';
+const CACHE_NAME = 'plane-radar-v5-0-9-2';
 const APP_FILES = [
   './',
   './index.html',
+  './invite.html',
   './game-logic.js',
   './multiplayer.js',
   './manifest.json',
   './distance.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/plane-radar-share.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   './sounds/radar/laserhit.mp3',

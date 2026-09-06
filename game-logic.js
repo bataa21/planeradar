@@ -308,13 +308,14 @@ function openRoomInvitationFromUrl() {
   input.value = code;
   const note = document.getElementById('battleEntryNote');
   note.textContent = lang === 'mn'
-    ? `✈️ ${code} өрөөний урилга ирлээ. Нэгдэх дээр дарна уу.`
-    : `✈️ Room ${code} invitation received. Tap Join.`;
+    ? `✈️ ${code} өрөөнд автоматаар нэгдэж байна…`
+    : `✈️ Joining room ${code} automatically…`;
   note.dataset.state = 'connected';
   document.getElementById('joinRoomBtn').focus();
 
   url.searchParams.delete('room');
   history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  setTimeout(() => window.PlaneRadarOnline?.joinRoom(), 350);
 }
 
 function createGrid() {

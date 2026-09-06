@@ -1,4 +1,4 @@
-// Plane Radar V5.0.9.1 — Invitation reliability
+// Plane Radar V5.0.9.2 — Dedicated invitation link
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -16,7 +16,7 @@
       connecting: "Connecting securely…",
       creating: "Creating room…",
       joining: "Joining room…",
-      waiting: code => `Room ${code} · Waiting for your friend…`,
+      waiting: code => `Room ${code} · Keep this open while waiting for your friend…`,
       connected: code => `✅ Friend connected · Room ${code}`,
       copied: code => `Room code ${code} copied.`,
       copyCode: code => `📋 Copy ${code}`,
@@ -39,7 +39,7 @@
       connecting: "Аюулгүй холбогдож байна…",
       creating: "Өрөө үүсгэж байна…",
       joining: "Өрөөнд нэгдэж байна…",
-      waiting: code => `Өрөө ${code} · Найзыгаа хүлээж байна…`,
+      waiting: code => `Өрөө ${code} · Найзыгаа хүлээхдээ үүнийг нээлттэй байлгана уу…`,
       connected: code => `✅ Найз холбогдлоо · Өрөө ${code}`,
       copied: code => `Өрөөний ${code} код хуулагдлаа.`,
       copyCode: code => `📋 ${code} хуулах`,
@@ -376,7 +376,7 @@
   }
 
   function invitationUrl() {
-    const url = new URL(window.location.pathname, window.location.origin);
+    const url = new URL("invite.html", window.location.href);
     url.searchParams.set("room", roomCode);
     url.hash = "";
     return url.toString();
