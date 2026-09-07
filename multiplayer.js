@@ -1,4 +1,4 @@
-// Plane Radar V5.0.9.2 — Dedicated invitation link
+// Plane Radar V5.0.9.3 — Share-sheet icon fix
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -377,6 +377,7 @@
 
   function invitationUrl() {
     const url = new URL("invite.html", window.location.href);
+    url.searchParams.set("v", "5093");
     url.searchParams.set("room", roomCode);
     url.hash = "";
     return url.toString();
