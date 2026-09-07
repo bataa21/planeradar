@@ -313,9 +313,9 @@ function openRoomInvitationFromUrl() {
   note.dataset.state = 'connected';
   document.getElementById('joinRoomBtn').focus();
 
-  url.searchParams.delete('room');
-  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-  setTimeout(() => window.PlaneRadarOnline?.joinRoom(), 350);
+  // Keep the invitation in the address until Firebase confirms a successful
+  // join. This lets a slow first launch retry without losing the room code.
+  setTimeout(() => window.PlaneRadarOnline?.joinRoom({ automatic: true }), 500);
 }
 
 function createGrid() {

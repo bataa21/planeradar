@@ -1,4 +1,4 @@
-// Plane Radar V5.0.9.3 — Share-sheet icon fix
+// Plane Radar V5.0.9.4 — Reliable first invitation opening
 (() => {
   const CONNECTION_KEY = "planeRadarOnlineConnection_v1";
   const firebaseConfig = {
@@ -76,6 +76,7 @@
   let heartbeatTimer = null;
   let currentMatchNumber = 0;
   let rematchResetting = false;
+  let joinInProgress = false;
 
   function saveConnection(difficulty) {
     if (!roomCode || !role) return;
@@ -225,6 +226,35 @@
         reject(error);
       });
     });
+  }
+
+  function waitForDatabaseConnection(timeoutMs = 7000) {
+    return new Promise(resolve => {
+      const reference = database.ref(".info/connected");
+      let finished = false;
+      const finish = connected => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reference.off("value", handleValue);
+        resolve(connected);
+      };
+      const handleValue = snapshot => {
+        if (snapshot.val() === true) finish(true);
+      };
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      reference.on("value", handleValue, () => finish(false));
+    });
+  }
+
+  const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+  function clearInvitationFromAddress() {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("room")) return;
+    url.searchParams.delete("room");
+    url.searchParams.delete("v");
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
   function stopListening() {
@@ -377,7 +407,7 @@
 
   function invitationUrl() {
     const url = new URL("invite.html", window.location.href);
-    url.searchParams.set("v", "5093");
+    url.searchParams.set("v", "5094");
     url.searchParams.set("room", roomCode);
     url.hash = "";
     return url.toString();
@@ -510,62 +540,84 @@
     }
   }
 
-  async function joinRoom() {
+  async function joinRoom(options = {}) {
+    const automatic = Boolean(options.automatic);
+    if (joinInProgress) return false;
     const candidate = (codeInput()?.value || "").replace(/\D/g, "").slice(0, 6);
     if (candidate.length !== 6) {
       setNote(t().invalidCode, "error");
-      return;
+      return false;
     }
     if (!navigator.onLine) {
       setNote(t().offline, "error");
-      return;
+      return false;
     }
+    joinInProgress = true;
     setBusy(true);
     placementEntered = false;
     setNote(t().joining, "busy");
+    let lastFailure = "unavailable";
     try {
-      const user = await ensureSignedIn();
-      const candidateRef = database.ref(`rooms/${candidate}`);
-      const initialSnapshot = await waitForServerRoom(candidateRef, 12000);
-      if (!initialSnapshot || !initialSnapshot.exists()) {
-        setNote(t().roomMissing, "error");
-        setBusy(false);
-        return;
+      const maximumAttempts = automatic ? 3 : 1;
+      for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+        if (attempt > 1) {
+          setNote(t().connecting, "busy");
+          await pause(700 * attempt);
+        }
+        try {
+          const user = await ensureSignedIn();
+          const connected = await waitForDatabaseConnection(automatic ? 7000 : 10000);
+          if (!connected) throw new Error("database-not-connected");
+
+          const candidateRef = database.ref(`rooms/${candidate}`);
+          const initialSnapshot = await waitForServerRoom(candidateRef, automatic ? 7000 : 12000);
+          if (!initialSnapshot || !initialSnapshot.exists()) {
+            lastFailure = "roomMissing";
+            continue;
+          }
+          const current = initialSnapshot.val();
+          if (current.hostUid === user.uid) {
+            setNote(t().ownRoom, "error");
+            return false;
+          }
+          if (current.guestUid && current.guestUid !== user.uid) {
+            setNote(t().roomFull, "error");
+            return false;
+          }
+          // Security Rules permit this only while the guest slot is empty (or is
+          // already owned by this user), so simultaneous third-player joins fail.
+          await candidateRef.update({
+            guestUid: user.uid,
+            guestReady: false,
+            guestRematch: false,
+            guestOnline: true,
+            guestSeenAt: firebase.database.ServerValue.TIMESTAMP,
+            status: "connected"
+          });
+          roomRef = candidateRef;
+          roomCode = candidate;
+          role = "guest";
+          currentMatchNumber = Number(current.matchNumber || 1);
+          saveConnection(current.difficulty);
+          statusKey = "connected";
+          await configurePresence();
+          listenToRoom();
+          clearInvitationFromAddress();
+          setNote(t().connected(candidate), "connected");
+          return true;
+        } catch (error) {
+          lastFailure = "unavailable";
+          console.warn(`Join attempt ${attempt} failed`, error);
+        }
       }
-      const current = initialSnapshot.val();
-      if (current.hostUid === user.uid) {
-        setNote(t().ownRoom, "error");
-        setBusy(false);
-        return;
-      }
-      if (current.guestUid && current.guestUid !== user.uid) {
-        setNote(t().roomFull, "error");
-        setBusy(false);
-        return;
-      }
-      // Security Rules permit this only while the guest slot is empty (or is
-      // already owned by this user), so simultaneous third-player joins fail.
-      await candidateRef.update({
-        guestUid: user.uid,
-        guestReady: false,
-        guestRematch: false,
-        guestOnline: true,
-        guestSeenAt: firebase.database.ServerValue.TIMESTAMP,
-        status: "connected"
-      });
-      roomRef = candidateRef;
-      roomCode = candidate;
-      role = "guest";
-      currentMatchNumber = Number(current.matchNumber || 1);
-      saveConnection(current.difficulty);
-      statusKey = "connected";
-      await configurePresence();
-      listenToRoom();
-      setNote(t().connected(candidate), "connected");
-      setBusy(false);
+      setNote(lastFailure === "roomMissing" ? t().roomMissing : t().unavailable, "error");
+      return false;
     } catch (error) {
       console.error("Join room failed", error);
       setNote(t().unavailable, "error");
+      return false;
+    } finally {
+      joinInProgress = false;
       setBusy(false);
     }
   }
